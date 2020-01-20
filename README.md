@@ -4,7 +4,7 @@ Fast weight solver for Two-Compartment LIF neurons using the OSQP library
 
 ## Compiling
 
-This library has no run-time dependencies. To build, you'll need a C++11 compliant C++ compiler and a C89 compliant C compiler.
+This library has no run-time dependencies. To build, you'll need a C++11 compliant C++ compiler and a C99 compliant C compiler.
 
 This library uses the `meson` build system, which uses `ninja`. To install both, run
 ```sh

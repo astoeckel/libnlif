@@ -1,5 +1,5 @@
 /*
- *  libbioneuron -- Library solving for synaptic weights
+ *  libbioneuronqp -- Library solving for synaptic weights
  *  Copyright (C) 2020  Andreas Stöckel
  *
  *  This program is free software: you can redistribute it and/or modify
@@ -24,8 +24,8 @@
  * @author Andreas Stöckel
  */
 
-#ifndef BIONEURON_BIONEURON_H
-#define BIONEURON_BIONEURON_H
+#ifndef BIONEURONQP_BIONEURONQP_H
+#define BIONEURONQP_BIONEURONQP_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -48,7 +48,7 @@ typedef enum {
 	BN_ERR_CANCEL = -13
 } BioneuronError;
 
-const char *bioneuron_strerr(BioneuronError err);
+const char *bioneuronqp_strerr(BioneuronError err);
 
 /**
  * Internally used Boolean type; this should be compatible with the C++ "bool"
@@ -146,18 +146,18 @@ typedef struct {
  * Creates a new BioneuronWeightProblem struct and fills it with some sane
  * default values.
  */
-BioneuronWeightProblem *bioneuron_problem_create();
+BioneuronWeightProblem *bioneuronqp_problem_create();
 
 /**
  * Frees a previously created BioneuronWeightProblem struct. Does not free the
  * memory regions "problem" is pointing at.
  */
-void bioneuron_problem_free(BioneuronWeightProblem *problem);
+void bioneuronqp_problem_free(BioneuronWeightProblem *problem);
 
 /**
  * Callback function type used to inform the caller about the current progress
  * of the weight solving process. Must return "true" if the computation should
- * continue; returning "false" cancels the computation and bioneuron_solve
+ * continue; returning "false" cancels the computation and bioneuronqp_solve
  * will return BN_ERR_CANCEL.
  */
 typedef bool (*BioneuronProgressCallback)(int n_done, int n_total);
@@ -179,15 +179,15 @@ typedef struct {
 	int n_threads;
 } BioneuronSolverParameters;
 
-BioneuronSolverParameters *bioneuron_solver_parameters_create();
+BioneuronSolverParameters *bioneuronqp_solver_parameters_create();
 
-void bioneuron_solver_parameters_free(BioneuronSolverParameters *params);
+void bioneuronqp_solver_parameters_free(BioneuronSolverParameters *params);
 
-BioneuronError bioneuron_solve(BioneuronWeightProblem *problem,
+BioneuronError bioneuronqp_solve(BioneuronWeightProblem *problem,
                                BioneuronSolverParameters *params);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* BIONEURON_BIONEURON_H */
+#endif /* BIONEURONQP_BIONEURONQP_H */

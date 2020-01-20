@@ -1,5 +1,5 @@
 /*
- *  libbioneuron -- Library solving for synaptic weights
+ *  libbioneuronqp -- Library solving for synaptic weights
  *  Copyright (C) 2020  Andreas Stöckel
  *
  *  This program is free software: you can redistribute it and/or modify
@@ -16,8 +16,8 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef BIONEURON_THREADPOOL_HPP
-#define BIONEURON_THREADPOOL_HPP
+#ifndef BIONEURONQP_THREADPOOL_HPP
+#define BIONEURONQP_THREADPOOL_HPP
 
 #include <functional>
 #include <memory>
@@ -38,4 +38,4 @@ public:
 	         const Progress &progress = Progress());
 };
 
-#endif /* BIONEURON_THREADPOOL_HPP */
+#endif /* BIONEURONQP_THREADPOOL_HPP */

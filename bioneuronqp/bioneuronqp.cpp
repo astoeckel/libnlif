@@ -1,5 +1,5 @@
 /*
- *  libbioneuron -- Library solving for synaptic weights
+ *  libbioneuronqp -- Library solving for synaptic weights
  *  Copyright (C) 2020  Andreas Stöckel
  *
  *  This program is free software: you can redistribute it and/or modify
@@ -24,7 +24,7 @@
  * @author Andreas Stöckel
  */
 
-#include "bioneuron.h"
+#include "bioneuronqp.h"
 
 #include <osqp/osqp.h>
 
@@ -33,6 +33,7 @@
 #include <limits>
 #include <sstream>
 #include <vector>
+#include <iostream>
 
 #include "threadpool.hpp"
 
@@ -115,7 +116,7 @@ VectorXd _solve_qp(const MatrixXd &P, const VectorXd &q, const MatrixXd &G,
 	OSQPSettings settings;
 	osqp_set_default_settings(&settings);
 	settings.eps_rel = tol;
-	settings.verbose = true; // XXX
+	settings.eps_abs = tol;
 
 	// Setup workspace
 	OSQPWorkspace *work = nullptr;
@@ -247,7 +248,7 @@ VectorXd _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
 	return _solve_linearly_constrained_quadratic_loss(Aext, bext, G, h, tol);
 }
 
-void _bioneuron_solve_single(BioneuronWeightProblem *problem,
+void _bioneuronqp_solve_single(BioneuronWeightProblem *problem,
                              BioneuronSolverParameters *params, size_t j)
 {
 	// Copy some input parameters as convenient aliases
@@ -303,9 +304,7 @@ void _bioneuron_solve_single(BioneuronWeightProblem *problem,
 		ws[2] *= Wscale;
 		ws[4] *= Wscale;
 		ws[5] *= Wscale;
-		for (size_t i = 0; i < 6; i++) {
-			ws[i] /= ws[1];
-		}
+		ws /= ws[1];
 	}
 
 	// Account for the number of samples in the regularisation factor
@@ -370,21 +369,21 @@ void _bioneuron_solve_single(BioneuronWeightProblem *problem,
 	i_pre_exc = 0, i_pre_inh = Npre_exc;
 	for (size_t i = 0; i < Npre; i++) {
 		if (ConExc(i, j)) {
-			WExc(i, j) = W[i_pre_exc++];
+			WExc(i, j) = W[i_pre_exc++] * Wscale;
 		}
 		if (ConInh(i, j)) {
-			WInh(i, j) = W[i_pre_inh++];
+			WInh(i, j) = W[i_pre_inh++] * Wscale;
 		}
 	}
 }
 
-BioneuronError _bioneuron_solve(BioneuronWeightProblem *problem,
+BioneuronError _bioneuronqp_solve(BioneuronWeightProblem *problem,
                                 BioneuronSolverParameters *params)
 {
 	// Construct the kernal that is being executed -- here, we're solving the
 	// weights for a single post-neuron.
 	auto kernel = [&](size_t idx) {
-		_bioneuron_solve_single(problem, params, idx);
+		_bioneuronqp_solve_single(problem, params, idx);
 	};
 
 	// Construct the progress callback
@@ -420,7 +419,7 @@ extern "C" {
  * Enum BioneuronError                                                        *
  ******************************************************************************/
 
-const char *bioneuron_strerr(BioneuronError err)
+const char *bioneuronqp_strerr(BioneuronError err)
 {
 	switch (err) {
 		case BN_ERR_OK:
@@ -462,7 +461,7 @@ const char *bioneuron_strerr(BioneuronError err)
 #define DEFAULT_REGULARISATION 1e-1
 #define DEFAULT_TOLERANCE 1e-6;
 
-BioneuronWeightProblem *bioneuron_problem_create()
+BioneuronWeightProblem *bioneuronqp_problem_create()
 {
 	BioneuronWeightProblem *problem = new BioneuronWeightProblem;
 	problem->n_pre = 0;
@@ -482,13 +481,13 @@ BioneuronWeightProblem *bioneuron_problem_create()
 	return problem;
 }
 
-void bioneuron_problem_free(BioneuronWeightProblem *problem) { delete problem; }
+void bioneuronqp_problem_free(BioneuronWeightProblem *problem) { delete problem; }
 
 /******************************************************************************
  * Struct BioneuronSolverParameters                                           *
  ******************************************************************************/
 
-BioneuronSolverParameters *bioneuron_solver_parameters_create()
+BioneuronSolverParameters *bioneuronqp_solver_parameters_create()
 {
 	BioneuronSolverParameters *params = new BioneuronSolverParameters;
 	params->renormalise = 1;
@@ -499,7 +498,7 @@ BioneuronSolverParameters *bioneuron_solver_parameters_create()
 	return params;
 }
 
-void bioneuron_solver_parameters_free(BioneuronSolverParameters *params)
+void bioneuronqp_solver_parameters_free(BioneuronSolverParameters *params)
 {
 	delete params;
 }
@@ -555,7 +554,7 @@ static BioneuronError _check_parameters_is_valid(
 	return BN_ERR_OK;
 }
 
-BioneuronError bioneuron_solve(BioneuronWeightProblem *problem,
+BioneuronError bioneuronqp_solve(BioneuronWeightProblem *problem,
                                BioneuronSolverParameters *params)
 {
 	// Make sure the given pointers point at valid problem and parameter
@@ -570,7 +569,7 @@ BioneuronError bioneuron_solve(BioneuronWeightProblem *problem,
 
 	// Forward the parameters and the problem description to the internal C++
 	// code.
-	return _bioneuron_solve(problem, params);
+	return _bioneuronqp_solve(problem, params);
 }
 
 #ifdef __cplusplus

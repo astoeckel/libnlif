@@ -1,4 +1,4 @@
-#  libbioneuron -- Library solving for synaptic weights
+#  libbioneuronqp -- Library solving for synaptic weights
 #  Copyright (C) 2020  Andreas Stöckel
 #
 #  This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,12 @@
 project(
 	'libbioneuron',
 	['c', 'cpp'],
-	default_options: ['cpp_std=c++11', 'b_ndebug=if-release'])
+	default_options: [
+		'cpp_std=c++11',
+		'c_std=c99',
+		'b_ndebug=if-release',
+		'buildtype=release',
+	])
 
 include_osqp = include_directories('extern/osqp')
 include_extern = include_directories('extern')
@@ -60,11 +65,11 @@ lib_osqp = library(
 	dependencies: [dep_m],
 )
 
-lib_bioneuron = library(
-	'bioneuron',
+lib_bioneuronqp = library(
+	'bioneuronqp',
 	[
-		'bioneuron/bioneuron.cpp',
-		'bioneuron/threadpool.cpp',
+		'bioneuronqp/bioneuronqp.cpp',
+		'bioneuronqp/threadpool.cpp',
 	],
 	dependencies: [dep_eigen3, dep_threads],
 	include_directories: [include_extern],

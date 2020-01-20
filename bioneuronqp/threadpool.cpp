@@ -1,5 +1,5 @@
 /*
- *  libbioneuron -- Library solving for synaptic weights
+ *  libbioneuronqp -- Library solving for synaptic weights
  *  Copyright (C) 2020  Andreas Stöckel
  *
  *  This program is free software: you can redistribute it and/or modify

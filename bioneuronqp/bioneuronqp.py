@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-#  libbioneuron -- Library solving for synaptic weights
+#  libbioneuronqp -- Library solving for synaptic weights
 #  Copyright (C) 2020  Andreas Stöckel
 #
 #  This program is free software: you can redistribute it and/or modify
@@ -48,6 +48,20 @@ BioneuronWarningCallback = ctypes.CFUNCTYPE(None, ctypes.c_char_p,
                                             ctypes.c_int)
 
 
+def default_progress_callback(n_done, n_total):
+    try:
+        sys.stderr.write("\rSolved {}/{} neuron weights".format(
+            n_done, n_total))
+        sys.stderr.flush()
+    except KeyboardInterrupt:
+        return False
+    return True
+
+
+def default_warning_callback(msg, idx):
+    print("WARN: " + msg)
+
+
 class BioneuronSolverParameters(ctypes.Structure):
     _fields_ = [
         ("renormalise", ctypes.c_ubyte),
@@ -70,7 +84,7 @@ def _load_dll():
     if DLLFound is None:
         DLL = None
         try:
-            DLL = ctypes.CDLL("libbioneuron.so")
+            DLL = ctypes.CDLL("libbioneuronqp.so")
         except OSError:
             pass
         if DLL is None:
@@ -79,27 +93,27 @@ def _load_dll():
         else:
             DLLFound = True
 
-        DLL.bioneuron_strerr.argtypes = [ctypes.c_int]
-        DLL.bioneuron_strerr.restype = ctypes.c_char_p
+        DLL.bioneuronqp_strerr.argtypes = [ctypes.c_int]
+        DLL.bioneuronqp_strerr.restype = ctypes.c_char_p
 
-        DLL.bioneuron_problem_create.argtypes = []
-        DLL.bioneuron_problem_create.restype = PBioneuronWeightProblem
+        DLL.bioneuronqp_problem_create.argtypes = []
+        DLL.bioneuronqp_problem_create.restype = PBioneuronWeightProblem
 
-        DLL.bioneuron_problem_free.argtypes = [PBioneuronWeightProblem]
-        DLL.bioneuron_problem_free.restype = None
+        DLL.bioneuronqp_problem_free.argtypes = [PBioneuronWeightProblem]
+        DLL.bioneuronqp_problem_free.restype = None
 
-        DLL.bioneuron_solver_parameters_create.argtypes = []
-        DLL.bioneuron_solver_parameters_create.restype = PBioneuronSolverParameters
+        DLL.bioneuronqp_solver_parameters_create.argtypes = []
+        DLL.bioneuronqp_solver_parameters_create.restype = PBioneuronSolverParameters
 
-        DLL.bioneuron_solver_parameters_free.argtypes = [
+        DLL.bioneuronqp_solver_parameters_free.argtypes = [
             PBioneuronSolverParameters
         ]
-        DLL.bioneuron_solver_parameters_free.restype = None
+        DLL.bioneuronqp_solver_parameters_free.restype = None
 
-        DLL.bioneuron_solve.argtypes = [
+        DLL.bioneuronqp_solve.argtypes = [
             PBioneuronWeightProblem, PBioneuronSolverParameters
         ]
-        DLL.bioneuron_solve.restype = ctypes.c_int
+        DLL.bioneuronqp_solve.restype = ctypes.c_int
 
     return DLL
 
@@ -112,11 +126,13 @@ def solve(Apre,
           nonneg=True,
           renormalise=True,
           tol=None,
-          reg=None):
+          reg=None,
+          progress_callback=default_progress_callback,
+          warning_callback=default_warning_callback):
     # Load the solver library
     _dll = _load_dll()
     if _dll is None:
-        raise OSError("libbioneuron.so not found")
+        raise OSError("libbioneuronqp.so not found; make sure the library is located withing the library path")
 
     # Set some default values
     if tol is None:
@@ -180,31 +196,29 @@ def solve(Apre,
     problem.synaptic_weights_exc = PDouble(c_we)
     problem.synaptic_weights_inh = PDouble(c_wi)
 
-    # Assemble the solver parameters
-    def progress(n_done, n_total):
-        sys.stderr.write("\rSolved {}/{} neuron weights".format(
-            n_done, n_total))
-        sys.stderr.flush()
-        return True
-
-    def warn(msg, idx):
-        print("WARN: " + msg)
-
     params = BioneuronSolverParameters()
     params.renormalise = renormalise
-    params.tolerance = 1e-6
-    params.progress = BioneuronProgressCallback(progress)
-    params.warn = BioneuronWarningCallback(warn)
-    params.n_threads = 7
+    params.tolerance = tol
+    params.progress = BioneuronProgressCallback(0 if progress_callback is None else progress_callback)
+    params.warn = BioneuronWarningCallback(0 if warning_callback is None else warning_callback)
+    params.n_threads = 0
 
     # Actually run the solver
-    _dll.bioneuron_solve(ctypes.pointer(problem), ctypes.pointer(params))
-    sys.stderr.write("\n")
+    err = _dll.bioneuronqp_solve(ctypes.pointer(problem), ctypes.pointer(params))
+    if err != 0:
+        raise RuntimeError(_dll.bioneuronqp_strerr(err))
 
     return c_we, c_wi
 
 
 if __name__ == "__main__":
+    """
+    Some code used for testing
+    """
+
+    import time
+    from nengo_bio.internal.qp_solver import solve as solve_ref
+    import matplotlib.pyplot as plt
 
     class LIF:
         slope = 2.0 / 3.0
@@ -249,37 +263,43 @@ if __name__ == "__main__":
     ens2 = Ensemble(102, 1)
 
     xs = np.linspace(-1, 1, 100).reshape(1, -1)
-    APre = ens1(xs)
-    JPost = ens2.J(xs)
+    Apre = ens1(xs)
+    Jpost = ens2.J(xs)
 
     ws = np.array([0, 1, -1, 1, 0, 0], dtype=np.float64)
 
-    iTh = None
+    kwargs = {
+        "Apre": Apre.T,
+        "Jpost": Jpost.T,
+        "ws": ws,
+        "iTh": None,
+        "renormalise": False,
+        "tol": 1e-4,
+        "reg": 1e-1,
+    }
 
-    import time
     t1 = time.perf_counter()
-    WE, WI = solve(APre.T, JPost.T, ws, iTh=iTh)
+    WE, WI = solve(**kwargs)
     t2 = time.perf_counter()
 
-    from nengo_bio.internal.qp_solver import solve as solve_ref
-    t3 = time.perf_counter() 
-    WE_ref, WI_ref = solve_ref(APre.T, JPost.T, ws, iTh=iTh)
-    t4 = time.perf_counter() 
+    t3 = time.perf_counter()
+    WE_ref, WI_ref = solve_ref(**kwargs)
+    t4 = time.perf_counter()
 
-    print(t2 - t1, t4 - t3)
+    print("Time: ", t2 - t1, t4 - t3)
+    print("Errs: ",
+        np.sqrt(np.mean(np.square(Jpost.T - Apre.T @ WE - Apre.T @ WI))),
+        np.sqrt(np.mean(np.square(Jpost.T - Apre.T @ WE_ref - Apre.T @ WI_ref))))
 
-    import matplotlib.pyplot as plt
     fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1)
-    ax1.plot(xs[0], APre.T)
-    ax2.plot(xs[0], JPost.T)
+    ax1.plot(xs[0], Apre.T)
+    ax2.plot(xs[0], Jpost.T)
     ax2.set_ylim(-1, 4)
 
-    print(WE, WI)
-
-    ax3.plot(APre.T @ WE - APre.T @ WI)
+    ax3.plot(Apre.T @ WE - Apre.T @ WI)
     ax3.set_ylim(-1, 4)
 
-    ax4.plot(APre.T @ WE_ref - APre.T @ WI_ref)
+    ax4.plot(Apre.T @ WE_ref - Apre.T @ WI_ref)
     ax4.set_ylim(-1, 4)
 
     plt.show()

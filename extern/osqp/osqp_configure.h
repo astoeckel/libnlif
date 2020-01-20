@@ -16,4 +16,6 @@ extern "C" {
 }
 # endif /* ifdef __cplusplus */
 
+//#define PRINTING
+
 #endif /* ifndef OSQP_CONFIGURE_H */
