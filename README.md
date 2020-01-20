@@ -1,6 +1,6 @@
 # libBioNeuronQP ‒ Fast Two-Comp LIF weight solver
 
-This is a fast weight solver for Two-Compartment LIF neurons using the [OSQP library](https://www.osqp.org/).
+This is a fast weight solver for Two-Compartment LIF neurons using the [OSQP library](https://www.osqp.org/) written in C++ with a C API. The code is supposed to be used via the supplied Python binding.
 
 ## Compiling
 
@@ -15,10 +15,15 @@ sudo pip3 install meson
 
 Then, to compile the library, simply run
 ```sh
-git clone https://github.com/astoeckel/libbioneuron
-cd libbioneuron; mkdir build; cd build
+git clone https://github.com/astoeckel/libbioneuronqp
+cd libbioneuronqp; mkdir build; cd build
 meson .. -Dbuildtype=release
 ninja
+```
+
+To test the code, run
+```sh
+LD_LIBRARY_PATH=. python3 ../bioneuronqp/bioneuronqp.py
 ```
 
 ## License
