@@ -33,7 +33,7 @@ dep_m = cc.find_library('m', required : false)
 dep_eigen3 = dependency('eigen3')
 dep_threads = dependency('threads')
 
-lib_osqp = library(
+lib_osqp = static_library(
 	'osqp',
 	[
 		'extern/osqp/amd_1.c',
