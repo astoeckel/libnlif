@@ -1,6 +1,6 @@
 # libbioneuron
 
-Weight solver for Two-Compartment LIF neurons using the OSQP library
+Fast weight solver for Two-Compartment LIF neurons using the OSQP library
 
 ## Compiling
 
