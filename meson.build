@@ -70,12 +70,3 @@ lib_bioneuron = library(
 	include_directories: [include_lib],
 	link_with: [lib_osqp],
 )
-
-exe_qp_test = executable(
-	'qp_test',
-	[
-		'bioneuron/qp_test.cpp',
-	],
-	include_directories: [include_lib],
-	link_with: [lib_osqp]
-)
