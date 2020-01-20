@@ -79,6 +79,10 @@ DLL = None
 
 
 def _load_dll():
+    """
+    Helper function used internally to load the C shared library.
+    """
+
     # Load the DLL if this has not been done yet
     global DLL, DLLFound
     if DLLFound is None:
@@ -127,12 +131,56 @@ def solve(Apre,
           renormalise=True,
           tol=None,
           reg=None,
+          use_lstsq=False,
           progress_callback=default_progress_callback,
           warning_callback=default_warning_callback):
+    """
+    Solves a synaptic weight qp problem.
+
+    Apre:
+        Pre-synaptic activities. Must be a n_samples x n_pre matrix.
+    Jpost:
+        Desired post-synaptic currents. Must be a n_samples x n_post matrix.
+    ws:
+        Neuron model parameters of the form
+                    b0 + b1 * gExc + b2 * gInh
+            Jequiv = --------------------------
+                    a0 + a1 * gExc + a2 * gInh
+        where ws = [b0, b1, b2, a0, a1, a2]. Use [0, 1, -1, 1, 0, 0] for a
+        standard current-based LIF neuron.
+    connection_matrix:
+        A binary 2 x n_pre x n_post matrix determining which neurons are
+        excitatorily and which are inhibitorily connected.
+    iTh:
+        Threshold current. The optimization problem is relaxed for currents
+        below the given value. If "None", relaxation is deactivated.
+    nonneg:
+        Whether synaptic weights should be nonnegative
+    renormalise:
+        Whether the problem should be renormalised. Only set this to true if the
+        target currents are in plausible biological scales (i.e. currents in pA
+        to nA).
+    tol:
+        Solver tolerance. Default is 1e-6
+    reg:
+        Regularisation. Default is 1e-1
+    use_lstsq:
+        Ignored. For compatibility with the nengo_bio internal solver.
+    progress_callback:
+        Function that is regularly being called with the current progress. May
+        return "False" to cancel the solving process, must return "True"
+        otherwise. Set to "None" to use no progress callback.
+    warning_callback:
+        Function that is being called whenever a warning is triggered. Set to
+        "None" to use no progress callback.
+    """
+
     # Load the solver library
     _dll = _load_dll()
     if _dll is None:
-        raise OSError("libbioneuronqp.so not found; make sure the library is located withing the library path")
+        raise OSError(
+            "libbioneuronqp.so not found; make sure the library is located withing the library path"
+        )
 
     # Set some default values
     if tol is None:
@@ -156,8 +204,8 @@ def solve(Apre,
     if (ws.size == 6):
         ws = np.repeat(ws.reshape(1, -1), Npost, axis=0)
     else:
-        assert ws.shape[0] == Npost and ws.shape[
-            1] == 6, "Invalid model weight matrix shape"
+        assert ws.shape[0] == Npost and ws.shape[1] == 6, \
+            "Invalid model weight matrix shape"
 
     # Make sure all matrices are in the correct format
     c_a_pre = Apre.astype(dtype=np.float64, order='C', copy=False)
@@ -199,12 +247,15 @@ def solve(Apre,
     params = BioneuronSolverParameters()
     params.renormalise = renormalise
     params.tolerance = tol
-    params.progress = BioneuronProgressCallback(0 if progress_callback is None else progress_callback)
-    params.warn = BioneuronWarningCallback(0 if warning_callback is None else warning_callback)
+    params.progress = BioneuronProgressCallback(
+        0 if progress_callback is None else progress_callback)
+    params.warn = BioneuronWarningCallback(
+        0 if warning_callback is None else warning_callback)
     params.n_threads = 0
 
     # Actually run the solver
-    err = _dll.bioneuronqp_solve(ctypes.pointer(problem), ctypes.pointer(params))
+    err = _dll.bioneuronqp_solve(ctypes.pointer(problem),
+                                 ctypes.pointer(params))
     if err != 0:
         raise RuntimeError(_dll.bioneuronqp_strerr(err))
 
@@ -216,6 +267,10 @@ def solve(Apre,
 ###############################################################################
 
 if __name__ == "__main__":
+    ###########################################################################
+    # Imports                                                                 #
+    ###########################################################################
+
     # Used for measuring the ellapsed time
     import time
 
@@ -231,7 +286,10 @@ if __name__ == "__main__":
     except ImportError:
         plt = None
 
-    # Micro implementation of the NEF
+    ###########################################################################
+    # Micro implementation of the NEF                                         #
+    ###########################################################################
+
     class LIF:
         slope = 2.0 / 3.0
 
@@ -271,6 +329,10 @@ if __name__ == "__main__":
         def J(self, x):
             return self.gain[:, None] * self.encoders @ x + self.bias[:, None]
 
+    ###########################################################################
+    # Actual test code                                                        #
+    ###########################################################################
+
     def RMS(e):
         return np.sqrt(np.mean(np.square(e)))
 
@@ -287,10 +349,10 @@ if __name__ == "__main__":
         "Apre": Apre.T,
         "Jpost": Jpost.T,
         "ws": ws,
-        "iTh": None,
-        "renormalise": False,
+        "iTh": 1.0,
         "tol": 1e-4,
         "reg": 1e-1,
+        "renormalise": False,
     }
 
     print("Solving weights using libbioneuronqp...")
@@ -302,6 +364,10 @@ if __name__ == "__main__":
     print("Error: ", RMS(Jpost.T - Apre.T @ WE - Apre.T @ WI))
     print()
 
+    ###########################################################################
+    # Plotting                                                                #
+    ###########################################################################
+
     if not solve_ref is None:
         print("Solving weights using nengobio.qp_solver (cvxopt)")
         t1 = time.perf_counter()
@@ -310,7 +376,6 @@ if __name__ == "__main__":
         print("Time : ", t2 - t1)
         print("Error: ", RMS(Jpost.T - Apre.T @ WE_ref - Apre.T @ WI_ref))
         print()
-
 
     if not plt is None:
         if solve_ref is None:

@@ -298,12 +298,17 @@ void _bioneuronqp_solve_single(BioneuronWeightProblem *problem,
 	// Renormalise the target currents
 	double Wscale = 1.0, LambdaScale = 1.0;
 	if (params->renormalise) {
-		Wscale = 1e-9;
+		// Need to scale the regularisation factor as well
 		LambdaScale = 1.0 / (ws[1] * ws[1]);
+
+		// Compute synaptic weights in nS
+		Wscale = 1e-9;
 		ws[1] *= Wscale;
 		ws[2] *= Wscale;
 		ws[4] *= Wscale;
 		ws[5] *= Wscale;
+
+		// Set ws[1]=1 for better numerical stability/conditioning
 		ws /= ws[1];
 	}
 
