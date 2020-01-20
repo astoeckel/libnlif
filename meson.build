@@ -19,8 +19,8 @@ project(
 	['c', 'cpp'],
 	default_options: ['cpp_std=c++11', 'b_ndebug=if-release'])
 
-include_osqp = include_directories('lib/osqp')
-include_lib = include_directories('lib')
+include_osqp = include_directories('extern/osqp')
+include_extern = include_directories('extern')
 
 cc = meson.get_compiler('c')
 dep_m = cc.find_library('m', required : false)
@@ -31,30 +31,30 @@ dep_threads = dependency('threads')
 lib_osqp = library(
 	'osqp',
 	[
-		'lib/osqp/amd_1.c',
-		'lib/osqp/amd_2.c',
-		'lib/osqp/amd_aat.c',
-		'lib/osqp/amd_defaults.c',
-		'lib/osqp/amd_info.c',
-		'lib/osqp/amd_order.c',
-		'lib/osqp/amd_postorder.c',
-		'lib/osqp/amd_post_tree.c',
-		'lib/osqp/amd_preprocess.c',
-		'lib/osqp/amd_valid.c',
-		'lib/osqp/qdldl.c',
-		'lib/osqp/qdldl_interface.c',
-		'lib/osqp/SuiteSparse_config.c',
-		'lib/osqp/auxil.c',
-		'lib/osqp/cs.c',
-		'lib/osqp/error.c',
-		'lib/osqp/kkt.c',
-		'lib/osqp/lin_alg.c',
-		'lib/osqp/lin_sys.c',
-		'lib/osqp/osqp.c',
-		'lib/osqp/polish.c',
-		'lib/osqp/proj.c',
-		'lib/osqp/scaling.c',
-		'lib/osqp/util.c',
+		'extern/osqp/amd_1.c',
+		'extern/osqp/amd_2.c',
+		'extern/osqp/amd_aat.c',
+		'extern/osqp/amd_defaults.c',
+		'extern/osqp/amd_info.c',
+		'extern/osqp/amd_order.c',
+		'extern/osqp/amd_postorder.c',
+		'extern/osqp/amd_post_tree.c',
+		'extern/osqp/amd_preprocess.c',
+		'extern/osqp/amd_valid.c',
+		'extern/osqp/qdldl.c',
+		'extern/osqp/qdldl_interface.c',
+		'extern/osqp/SuiteSparse_config.c',
+		'extern/osqp/auxil.c',
+		'extern/osqp/cs.c',
+		'extern/osqp/error.c',
+		'extern/osqp/kkt.c',
+		'extern/osqp/lin_alg.c',
+		'extern/osqp/lin_sys.c',
+		'extern/osqp/osqp.c',
+		'extern/osqp/polish.c',
+		'extern/osqp/proj.c',
+		'extern/osqp/scaling.c',
+		'extern/osqp/util.c',
 	],
 	include_directories: [include_osqp],
 	dependencies: [dep_m],
@@ -67,6 +67,6 @@ lib_bioneuron = library(
 		'bioneuron/threadpool.cpp',
 	],
 	dependencies: [dep_eigen3, dep_threads],
-	include_directories: [include_lib],
+	include_directories: [include_extern],
 	link_with: [lib_osqp],
 )
