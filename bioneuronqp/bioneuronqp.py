@@ -211,15 +211,27 @@ def solve(Apre,
     return c_we, c_wi
 
 
+###############################################################################
+# MAIN PROGRAM -- RUNS THE ABOVE CODE                                         #
+###############################################################################
+
 if __name__ == "__main__":
-    """
-    Some code used for testing
-    """
-
+    # Used for measuring the ellapsed time
     import time
-    from nengo_bio.internal.qp_solver import solve as solve_ref
-    import matplotlib.pyplot as plt
 
+    # Well-tested reference implementation from nengo_bio
+    try:
+        from nengo_bio.internal.qp_solver import solve as solve_ref
+    except ImportError:
+        solve_ref = None
+
+    # Plot the results if matplotlib is installed
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        plt = None
+
+    # Micro implementation of the NEF
     class LIF:
         slope = 2.0 / 3.0
 
@@ -259,6 +271,9 @@ if __name__ == "__main__":
         def J(self, x):
             return self.gain[:, None] * self.encoders @ x + self.bias[:, None]
 
+    def RMS(e):
+        return np.sqrt(np.mean(np.square(e)))
+
     ens1 = Ensemble(101, 1)
     ens2 = Ensemble(102, 1)
 
@@ -278,28 +293,54 @@ if __name__ == "__main__":
         "reg": 1e-1,
     }
 
+    print("Solving weights using libbioneuronqp...")
     t1 = time.perf_counter()
     WE, WI = solve(**kwargs)
+    sys.stderr.write('\n')
     t2 = time.perf_counter()
+    print("Time : ", t2 - t1)
+    print("Error: ", RMS(Jpost.T - Apre.T @ WE - Apre.T @ WI))
+    print()
 
-    t3 = time.perf_counter()
-    WE_ref, WI_ref = solve_ref(**kwargs)
-    t4 = time.perf_counter()
+    if not solve_ref is None:
+        print("Solving weights using nengobio.qp_solver (cvxopt)")
+        t1 = time.perf_counter()
+        WE_ref, WI_ref = solve_ref(**kwargs)
+        t2 = time.perf_counter()
+        print("Time : ", t2 - t1)
+        print("Error: ", RMS(Jpost.T - Apre.T @ WE_ref - Apre.T @ WI_ref))
+        print()
 
-    print("Time: ", t2 - t1, t4 - t3)
-    print("Errs: ",
-        np.sqrt(np.mean(np.square(Jpost.T - Apre.T @ WE - Apre.T @ WI))),
-        np.sqrt(np.mean(np.square(Jpost.T - Apre.T @ WE_ref - Apre.T @ WI_ref))))
 
-    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1)
-    ax1.plot(xs[0], Apre.T)
-    ax2.plot(xs[0], Jpost.T)
-    ax2.set_ylim(-1, 4)
+    if not plt is None:
+        if solve_ref is None:
+            fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 14))
+        else:
+            fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(10, 18))
 
-    ax3.plot(Apre.T @ WE - Apre.T @ WI)
-    ax3.set_ylim(-1, 4)
+        ax1.plot(xs[0], Apre.T)
+        ax1.set_xlabel("Stimulus $x$")
+        ax1.set_ylabel("Response rate")
+        ax1.set_title("Ens 1 Tuning curves")
 
-    ax4.plot(Apre.T @ WE_ref - Apre.T @ WI_ref)
-    ax4.set_ylim(-1, 4)
+        ax2.plot(xs[0], Jpost.T)
+        ax2.set_ylim(-1, 4)
+        ax2.set_xlabel("Stimulus $x$")
+        ax2.set_ylabel("Input current $J$")
+        ax2.set_title("Ens 2 Desired Input Currents")
 
-    plt.show()
+        ax3.plot(Apre.T @ WE - Apre.T @ WI)
+        ax3.set_ylim(-1, 4)
+        ax3.set_xlabel("Stimulus $x$")
+        ax3.set_ylabel("Input current $J$")
+        ax3.set_title("Ens 2 Desired Input Currents (libbioneuronqp)")
+
+        if not solve_ref is None:
+            ax4.plot(Apre.T @ WE_ref - Apre.T @ WI_ref)
+            ax4.set_ylim(-1, 4)
+            ax4.set_xlabel("Stimulus $x$")
+            ax4.set_ylabel("Input current $J$")
+            ax4.set_title("Ens 2 Desired Input Currents (nengo_bio.qp_solver)")
+
+        plt.tight_layout()
+        plt.show()
