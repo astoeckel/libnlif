@@ -98,7 +98,7 @@ public:
 	      m_work_complete(0U)
 	{
 		if (n_threads == 0) {
-			n_threads = std::max(std::thread::hardware_concurrency() / 2U, 1U);
+			n_threads = std::max(std::thread::hardware_concurrency(), 1U);
 		}
 		for (unsigned int i = 0U; i < n_threads; i++) {
 			m_pool.emplace_back(thread_main, this, i, n_threads);

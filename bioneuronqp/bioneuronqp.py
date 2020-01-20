@@ -133,7 +133,8 @@ def solve(Apre,
           reg=None,
           use_lstsq=False,
           progress_callback=default_progress_callback,
-          warning_callback=default_warning_callback):
+          warning_callback=default_warning_callback,
+          n_threads=0):
     """
     Solves a synaptic weight qp problem.
 
@@ -251,7 +252,7 @@ def solve(Apre,
         0 if progress_callback is None else progress_callback)
     params.warn = BioneuronWarningCallback(
         0 if warning_callback is None else warning_callback)
-    params.n_threads = 0
+    params.n_threads = n_threads
 
     # Actually run the solver
     err = _dll.bioneuronqp_solve(ctypes.pointer(problem),
