@@ -115,12 +115,14 @@ VectorXd _solve_qp(const MatrixXd &P, const VectorXd &q, const MatrixXd &G,
 	// Define solver settings as default
 	OSQPSettings settings;
 	osqp_set_default_settings(&settings);
+	settings.scaling = 1;
+	settings.scaled_termination = 1;
 	settings.eps_rel = tol;
 	settings.eps_abs = tol;
 
 	// Setup workspace
 	OSQPWorkspace *work = nullptr;
-	/*int err =*/ osqp_setup(&work, &data, &settings);
+	/*int err =*/osqp_setup(&work, &data, &settings);
 	// XXX: Handle errors?
 
 	// Solve the problem
