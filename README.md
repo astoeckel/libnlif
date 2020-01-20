@@ -38,9 +38,7 @@ Copyright (C) 2019 Bartolomeo Stellato, Goran Banjac, Paul Goulart, Stephen Boyd
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -51,12 +49,9 @@ limitations under the License.
 **QDLDL**  
 Copyright (C) 2019 Paul Goulart, Bartolomeo Stellato, Goran Banjac
 
-
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -69,15 +64,16 @@ Copyright (C) 1996-2016 Timothy A. Davis, Patrick R. Amestoy, and Iain S. Duff
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
-    * Redistributions of source code must retain the above copyright
-      notice, this list of conditions and the following disclaimer.
-    * Redistributions in binary form must reproduce the above copyright
-      notice, this list of conditions and the following disclaimer in the
-      documentation and/or other materials provided with the distribution.
-    * Neither the name of the organizations to which the authors are
-      affiliated, nor the names of its contributors may be used to endorse
-      or promote products derived from this software without specific prior
-      written permission.
+
+* Redistributions of source code must retain the above copyright
+ notice, this list of conditions and the following disclaimer.
+* Redistributions in binary form must reproduce the above copyright
+  notice, this list of conditions and the following disclaimer in the
+  documentation and/or other materials provided with the distribution.
+* Neither the name of the organizations to which the authors are
+  affiliated, nor the names of its contributors may be used to endorse
+  or promote products derived from this software without specific prior
+  written permission.
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
