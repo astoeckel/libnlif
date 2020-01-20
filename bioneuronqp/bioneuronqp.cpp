@@ -30,10 +30,10 @@
 
 #include <Eigen/Dense>
 #include <cmath>
+#include <iostream>
 #include <limits>
 #include <sstream>
 #include <vector>
-#include <iostream>
 
 #include "threadpool.hpp"
 
@@ -249,7 +249,7 @@ VectorXd _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
 }
 
 void _bioneuronqp_solve_single(BioneuronWeightProblem *problem,
-                             BioneuronSolverParameters *params, size_t j)
+                               BioneuronSolverParameters *params, size_t j)
 {
 	// Copy some input parameters as convenient aliases
 	size_t Npre = problem->n_pre;
@@ -378,7 +378,7 @@ void _bioneuronqp_solve_single(BioneuronWeightProblem *problem,
 }
 
 BioneuronError _bioneuronqp_solve(BioneuronWeightProblem *problem,
-                                BioneuronSolverParameters *params)
+                                  BioneuronSolverParameters *params)
 {
 	// Construct the kernal that is being executed -- here, we're solving the
 	// weights for a single post-neuron.
@@ -481,7 +481,10 @@ BioneuronWeightProblem *bioneuronqp_problem_create()
 	return problem;
 }
 
-void bioneuronqp_problem_free(BioneuronWeightProblem *problem) { delete problem; }
+void bioneuronqp_problem_free(BioneuronWeightProblem *problem)
+{
+	delete problem;
+}
 
 /******************************************************************************
  * Struct BioneuronSolverParameters                                           *
@@ -555,7 +558,7 @@ static BioneuronError _check_parameters_is_valid(
 }
 
 BioneuronError bioneuronqp_solve(BioneuronWeightProblem *problem,
-                               BioneuronSolverParameters *params)
+                                 BioneuronSolverParameters *params)
 {
 	// Make sure the given pointers point at valid problem and parameter
 	// descriptors
