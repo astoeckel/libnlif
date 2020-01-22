@@ -29,6 +29,8 @@
 #include <osqp/osqp.h>
 
 #include <Eigen/Dense>
+#include <Eigen/Sparse>
+
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -43,60 +45,37 @@ using namespace Eigen;
  * INTERNAL C++ CODE                                                          *
  ******************************************************************************/
 
+using SpMatrixXd = SparseMatrix<double>;
 using MatrixMap = Map<Matrix<double, Dynamic, Dynamic, Eigen::RowMajor>>;
 using BoolMatrixMap =
     Map<Matrix<unsigned char, Dynamic, Dynamic, Eigen::RowMajor>>;
 using BoolVector = Matrix<unsigned char, Dynamic, 1>;
 
 namespace {
-/**
- * This class represents a matrix in the Compressed Sparse Column (CSC) format
- * using zero-based indexing.
- *
- * See https://people.sc.fsu.edu/~jburkardt/data/cc/cc.html for a description of
- * the format.
- */
-struct CSCMatrix {
+class CSCMatrix {
 private:
 	csc m_csc;
-	std::vector<c_int> m_col;
-	std::vector<c_int> m_row;
-	std::vector<c_float> m_x;
 
 public:
-	CSCMatrix(const MatrixXd &mat, bool upper_triangle = false)
-	{
-		c_int m = mat.rows(), n = mat.cols();
-
-		m_col.push_back(0);
-		for (c_int j = 0; j < n; j++) {
-			for (c_int i = 0; i < (upper_triangle ? (j + 1) : m); i++) {
-				if (mat(i, j) != 0.0) {
-					m_row.push_back(i);
-					m_x.push_back(mat(i, j));
-				}
-			}
-			m_col.push_back(m_x.size());
-		}
-
-		m_csc.nzmax = m * n;
-		m_csc.m = m;
-		m_csc.n = n;
-		m_csc.p = m_col.data();
-		m_csc.i = m_row.data();
-		m_csc.x = m_x.data();
-		m_csc.nzmax = m_x.size();
+	CSCMatrix(SpMatrixXd &mat) {
+		mat.makeCompressed();
+		m_csc.m = mat.rows();
+		m_csc.n = mat.cols();
+		m_csc.p = mat.outerIndexPtr();
+		m_csc.i = mat.innerIndexPtr();
+		m_csc.x = mat.valuePtr();
+		m_csc.nzmax = mat.nonZeros();
 		m_csc.nz = -1;
 	}
 
 	operator csc *() { return &m_csc; }
 };
 
-VectorXd _solve_qp(const MatrixXd &P, const VectorXd &q, const MatrixXd &G,
-                   const VectorXd &h, double tol)
+VectorXd _solve_qp(SpMatrixXd &P, VectorXd &q, SpMatrixXd &G,
+                   VectorXd &h, double tol)
 {
 	// Convert the P and G matrix into sparse CSC matrices
-	CSCMatrix Pcsc(P, true), Gcsc(G);
+	CSCMatrix Pcsc(P), Gcsc(G);
 
 	// Generate a lower bound matrix
 	VectorXd l =
@@ -137,18 +116,27 @@ VectorXd _solve_qp(const MatrixXd &P, const VectorXd &q, const MatrixXd &G,
 	return res;
 }
 
-VectorXd _solve_linearly_constrained_quadratic_loss(const MatrixXd &C,
-                                                    const VectorXd &d,
-                                                    const MatrixXd &G,
-                                                    const VectorXd &h,
+/*VectorXd _solve_linearly_constrained_quadratic_loss(SpMatrixXd &C,
+                                                    VectorXd &d,
+                                                    SpMatrixXd &G,
+                                                    VectorXd &h,
                                                     double tol)
 {
 	// Compute the symmetric "P" matrix for the QP problem
-	MatrixXd Pqp = C.transpose() * C;
+	SpMatrixXd Pqp = (C.transpose() * C).triangularView<Upper>();
 	VectorXd qqp = -C.transpose() * d;
 
 	// Solve the QP problem
 	return _solve_qp(Pqp, qqp, G, h, tol);
+}*/
+
+template<typename T>
+size_t sum(const T &t) {
+	size_t res = 0;
+	for (size_t i = 0; i < size_t(t.size()); i++) {
+		res += t[i];
+	}
+	return res;
 }
 
 VectorXd _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
@@ -163,7 +151,7 @@ VectorXd _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
 	// Compute the number of slack variables required to solve this problem
 	const size_t n_cstr = A.rows();
 	const size_t n_vars = A.cols();
-	const size_t n_cstr_valid = valid.sum();
+	const size_t n_cstr_valid = sum(valid);
 	const size_t n_cstr_invalid = n_cstr - n_cstr_valid;
 	const size_t n_slack = n_cstr_invalid;
 
@@ -171,12 +159,6 @@ VectorXd _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
 	const size_t v0 = 0;
 	const size_t v1 = v0 + n_vars;
 	const size_t v2 = v1 + n_slack;
-
-	// Quadratic constraints
-	const size_t a0 = 0;
-	const size_t a1 = a0 + n_cstr_valid;
-	const size_t a2 = a1 + n_vars;
-	const size_t a3 = a2 + n_slack;
 
 	// Inequality constraints
 	const size_t g0 = 0;
@@ -194,60 +176,95 @@ VectorXd _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
 	// way that the errors are implicitly divided by the number of constraints.
 	const double m1 =
 	    std::sqrt(double(n_cstr) / std::max<double>(1.0, n_cstr_valid));
-	const double m2 =
-	    std::sqrt(double(n_cstr) / std::max<double>(1.0, n_cstr_invalid));
+	const double m2 = double(n_cstr) / std::max<double>(1.0, n_cstr_invalid);
 
-	// Copy the valid constraints to Aext
-	MatrixXd Aext = MatrixXd::Zero(a3, v2);
-	VectorXd bext = VectorXd::Zero(a3);
+	// Compute a dense matrix containing the valid constraints and fill the
+	// target vector b
+	MatrixXd Avalid(n_cstr_valid, n_vars);
+	VectorXd bvalid = VectorXd::Zero(n_cstr_valid);
 	size_t i_valid = 0;
 	for (size_t i = 0; i < n_cstr; i++) {
 		if (valid[i]) {
 			for (size_t j = 0; j < n_vars; j++) {
-				Aext(a0 + i_valid, v0 + j) = A(i, j) * m1;
+				Avalid(i_valid, v0 + j) = A(i, j) * m1;
 			}
-			bext[i_valid] = b[i] * m1;
+			bvalid[i_valid] = b[i] * m1;
 			i_valid++;
 		}
 	}
 
-	// Regularise the weights
-	reg = std::sqrt(reg);
-	for (size_t i = 0; i < n_vars; i++) {
-		Aext(a1 + i, v0 + i) = reg;
+	// Compute Avalid.T @ Avalid
+	MatrixXd ATAvalid;
+	ATAvalid.noalias() = Avalid.transpose() * Avalid;
+
+	// Add the square regularisation term to Avalid
+	for (size_t i = v0; i < v1; i++) {
+		ATAvalid(i, i) += reg;
 	}
 
-	// Penalise slack variables
-	for (size_t i = 0; i < n_slack; i++) {
-		Aext(a2 + i, v1 + i) = m2;
+	// Compute the sparsity pattern of Aext
+	VectorXi Aspp(v2);
+	for (size_t i = v0; i < v1; i++) {
+		Aspp[i] = i + 1; // Only copying the upper triangle
+	}
+	for (size_t i = v1; i < v2; i++) {
+		Aspp[i] = 1;
+	}
+
+	// Copy ATAvalid to a sparse matrix Aext. Only copy the upper triangle.
+	SpMatrixXd Aext(v2, v2);
+	Aext.reserve(Aspp);
+	for (size_t j = v0; j < v1; j++) {
+		for (size_t i = v0; i <= j; i++) {
+			Aext.insert(i, j) = ATAvalid(i, j);
+		}
+	}
+	// Penalize slack variables
+	for (size_t i = v1; i < v2; i++) {
+		Aext.insert(i, i) = m2;
+	}
+
+	// Compute -Avalid.transpose() * bvalid and store the result in a larger
+	// vector bext
+	VectorXd bext = VectorXd::Zero(v2);
+	bext.block(v0, 0, v1, 1) = -Avalid.transpose() * bvalid;
+
+	// Compute the sparsity pattern of G
+	VectorXi Gssp(v2);
+	for (size_t i = v0; i < v1; i++) {
+		Gssp[i] = n_cstr_invalid + (nonneg ? 1 : 0);
+	}
+	for (size_t i = v1; i < v2; i++) {
+		Gssp[i] = 1;
 	}
 
 	// Form the inequality constraints
-	MatrixXd G = MatrixXd::Zero(g2, v2);
+	SpMatrixXd G(g2, v2);
+	G.reserve(Gssp);
 	VectorXd h = VectorXd::Zero(g2);
 	i_valid = 0;
 	for (size_t i = 0; i < n_cstr; i++) {
 		if (!valid[i]) {
 			for (size_t j = 0; j < n_vars; j++) {
-				G(g0 + i_valid, v0 + j) = A(i, j);
+				G.insert(g0 + i_valid, v0 + j) = A(i, j);
 			}
 			h[i_valid] = i_th;
 			i_valid++;
 		}
 	}
 	for (size_t i = 0; i < n_slack; i++) {
-		G(g0 + i, v1 + i) = -1;
+		G.insert(g0 + i, v1 + i) = -1;
 	}
 	if (nonneg) {
 		for (size_t i = 0; i < n_vars; i++) {
-			G(g1 + i, v0 + i) = -1;
+			G.insert(g1 + i, v0 + i) = -1;
 		}
 	}
 
 	//
 	// Step 3: Sovle the QP
 	//
-	return _solve_linearly_constrained_quadratic_loss(Aext, bext, G, h, tol);
+	return _solve_qp(Aext, bext, G, h, tol);
 }
 
 void _bioneuronqp_solve_single(BioneuronWeightProblem *problem,
@@ -351,12 +368,11 @@ void _bioneuronqp_solve_single(BioneuronWeightProblem *problem,
 	}
 
 	// Assemble the "b" matrix for the least squares problem
-	MatrixXd b = JPost.col(j).array() * b0 - a0;
+	VectorXd b = JPost.col(j).array() * b0 - a0;
 
 	// Determine which target currents are valid and which target currents are
 	// not
-	Matrix<unsigned char, Dynamic, 1> valid =
-	    Matrix<unsigned char, Dynamic, 1>::Ones(Nsamples);
+	BoolVector valid = BoolVector::Ones(Nsamples);
 	if (problem->relax_subthreshold) {
 		for (size_t i = 0; i < Nsamples; i++) {
 			if (JPost(i, j) < problem->j_threshold) {

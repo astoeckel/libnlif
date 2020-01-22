@@ -337,10 +337,12 @@ if __name__ == "__main__":
     def RMS(e):
         return np.sqrt(np.mean(np.square(e)))
 
+    np.random.seed(34812)
+
     ens1 = Ensemble(101, 1)
     ens2 = Ensemble(102, 1)
 
-    xs = np.linspace(-1, 1, 100).reshape(1, -1)
+    xs = np.linspace(-1, 1, 1000).reshape(1, -1)
     Apre = ens1(xs)
     Jpost = ens2.J(xs)
 
@@ -350,10 +352,10 @@ if __name__ == "__main__":
         "Apre": Apre.T,
         "Jpost": Jpost.T,
         "ws": ws,
-        "iTh": 1.0,
+        "iTh": None,
         "tol": 1e-4,
         "reg": 1e-1,
-        "renormalise": False,
+        "renormalise": True,
     }
 
     print("Solving weights using libbioneuronqp...")
