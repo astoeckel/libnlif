@@ -26,17 +26,16 @@
 
 #include "bioneuronqp.h"
 
-#include <osqp/osqp.h>
-
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
-
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <limits>
 #include <sstream>
 #include <vector>
 
+#include "osqp/osqp.h"
 #include "threadpool.hpp"
 
 using namespace Eigen;
@@ -57,7 +56,8 @@ private:
 	csc m_csc;
 
 public:
-	CSCMatrix(SpMatrixXd &mat) {
+	CSCMatrix(SpMatrixXd &mat)
+	{
 		mat.makeCompressed();
 		m_csc.m = mat.rows();
 		m_csc.n = mat.cols();
@@ -71,8 +71,13 @@ public:
 	operator csc *() { return &m_csc; }
 };
 
-VectorXd _solve_qp(SpMatrixXd &P, VectorXd &q, SpMatrixXd &G,
-                   VectorXd &h, double tol)
+struct QPResult {
+	VectorXd x;
+	double objective_val;
+};
+
+QPResult _solve_qp(SpMatrixXd &P, VectorXd &q, SpMatrixXd &G, VectorXd &h,
+                   double tol)
 {
 	// Convert the P and G matrix into sparse CSC matrices
 	CSCMatrix Pcsc(P), Gcsc(G);
@@ -94,8 +99,9 @@ VectorXd _solve_qp(SpMatrixXd &P, VectorXd &q, SpMatrixXd &G,
 	// Define solver settings as default
 	OSQPSettings settings;
 	osqp_set_default_settings(&settings);
-	settings.scaling = 1;
-	settings.scaled_termination = 1;
+	settings.scaling = 0;
+	settings.scaled_termination = 0;
+	settings.rho = 1e-1;
 	settings.eps_rel = tol;
 	settings.eps_abs = tol;
 
@@ -116,22 +122,9 @@ VectorXd _solve_qp(SpMatrixXd &P, VectorXd &q, SpMatrixXd &G,
 	return res;
 }
 
-/*VectorXd _solve_linearly_constrained_quadratic_loss(SpMatrixXd &C,
-                                                    VectorXd &d,
-                                                    SpMatrixXd &G,
-                                                    VectorXd &h,
-                                                    double tol)
+template <typename T>
+size_t sum(const T &t)
 {
-	// Compute the symmetric "P" matrix for the QP problem
-	SpMatrixXd Pqp = (C.transpose() * C).triangularView<Upper>();
-	VectorXd qqp = -C.transpose() * d;
-
-	// Solve the QP problem
-	return _solve_qp(Pqp, qqp, G, h, tol);
-}*/
-
-template<typename T>
-size_t sum(const T &t) {
 	size_t res = 0;
 	for (size_t i = 0; i < size_t(t.size()); i++) {
 		res += t[i];
@@ -139,7 +132,7 @@ size_t sum(const T &t) {
 	return res;
 }
 
-VectorXd _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
+QPResult _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
                            const BoolVector &valid, double i_th, double reg,
                            double tol, bool nonneg)
 {
@@ -176,7 +169,7 @@ VectorXd _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
 	// way that the errors are implicitly divided by the number of constraints.
 	const double m1 =
 	    std::sqrt(double(n_cstr) / std::max<double>(1.0, n_cstr_valid));
-	const double m2 = double(n_cstr) / std::max<double>(1.0, n_cstr_invalid);
+	const double m2 = double(n_cstr) / std::max<double>(1.0, n_slack);
 
 	// Compute a dense matrix containing the valid constraints and fill the
 	// target vector b
@@ -205,7 +198,7 @@ VectorXd _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
 	// Compute the sparsity pattern of Aext
 	VectorXi Aspp(v2);
 	for (size_t i = v0; i < v1; i++) {
-		Aspp[i] = i + 1; // Only copying the upper triangle
+		Aspp[i] = i + 1;  // Only copying the upper triangle
 	}
 	for (size_t i = v1; i < v2; i++) {
 		Aspp[i] = 1;
@@ -252,9 +245,14 @@ VectorXd _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
 			i_valid++;
 		}
 	}
-	for (size_t i = 0; i < n_slack; i++) {
+	// Subtract the slack variable from each inequality constraint. This allows
+	// the inequality constraints to be violated at the cost of increasing the
+	// error.
+	for (size_t i = 0; i < n_cstr_invalid; i++) {
 		G.insert(g0 + i, v1 + i) = -1;
 	}
+
+	// Make sure the weights are nonnegative if nonneg is set
 	if (nonneg) {
 		for (size_t i = 0; i < n_vars; i++) {
 			G.insert(g1 + i, v0 + i) = -1;
@@ -384,19 +382,25 @@ void _bioneuronqp_solve_single(BioneuronWeightProblem *problem,
 	// Solve the quadratic programing problem
 	const double i_th = problem->j_threshold * b0 - a0;
 	const double reg = problem->regularisation * LambdaScale;
+	const bool nonneg = problem->non_negative;
 	const double tol = params->tolerance;
-	VectorXd W =
-	    _solve_weights_qp(A, b, valid, i_th, reg, tol, problem->non_negative);
+	QPResult res =
+	    _solve_weights_qp(A, b, valid, i_th, reg, tol, nonneg);
 
 	// Distribute the resulting weights back to their correct locations
 	i_pre_exc = 0, i_pre_inh = Npre_exc;
 	for (size_t i = 0; i < Npre; i++) {
 		if (ConExc(i, j)) {
-			WExc(i, j) = W[i_pre_exc++] * Wscale;
+			WExc(i, j) = res.x[i_pre_exc++] * Wscale;
 		}
 		if (ConInh(i, j)) {
-			WInh(i, j) = W[i_pre_inh++] * Wscale;
+			WInh(i, j) = res.x[i_pre_inh++] * Wscale;
 		}
+	}
+
+	// Store the objective values
+	if (problem->objective_vals) {
+		problem->objective_vals[j] = res.objective_val;
 	}
 }
 

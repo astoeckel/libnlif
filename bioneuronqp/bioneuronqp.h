@@ -140,6 +140,12 @@ typedef struct {
 	 * should be stored. This is a n_pre x n_post matrix.
 	 */
 	double *synaptic_weights_inh;
+
+	/**
+	 * Array in which the objective function values for each neuron are stored.
+	 * May be null if the caller is not interested in these values.
+	 */
+	double *objective_vals;
 } BioneuronWeightProblem;
 
 /**
@@ -172,10 +178,35 @@ typedef void (*BioneuronWarningCallback)(const char *msg, int i_post);
  * Parameters used when solving for weights.
  */
 typedef struct {
+	/**
+	 * If set to true, rescales the given problem assuming the input uses
+	 * biologically plausible parameters.
+	 */
 	BioneuronBool renormalise;
+
+	/**
+	 * Sets the absolute and relative abortion criteria. (eps_rel and eps_abs
+	 * in osqp).
+	 */
 	double tolerance;
+
+	/**
+	 * Callback being called to indicate progress. May be NULL if no such
+	 * callback function should be called. This function is called in
+	 * approximately 100ms intervals and may return "false" if the operation
+	 * is to be cancelled. Otherwise, the callback should return "true".
+	 * */
 	BioneuronProgressCallback progress;
+
+	/**
+	 * Callback called to issue warning messages.
+	 */
 	BioneuronWarningCallback warn;
+
+	/**
+	 * Number of threads to use. A value smaller or equal to zero indicates that
+	 * all available processor cores should be used.
+	 */
 	int n_threads;
 } BioneuronSolverParameters;
 

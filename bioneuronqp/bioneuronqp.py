@@ -19,7 +19,7 @@
 import ctypes
 import numpy as np
 import sys
-
+import signal
 
 class BioneuronWeightProblem(ctypes.Structure):
     _fields_ = [
@@ -37,6 +37,7 @@ class BioneuronWeightProblem(ctypes.Structure):
         ("non_negative", ctypes.c_ubyte),
         ("synaptic_weights_exc", ctypes.POINTER(ctypes.c_double)),
         ("synaptic_weights_inh", ctypes.POINTER(ctypes.c_double)),
+        ("objective_vals", ctypes.POINTER(ctypes.c_double)),
     ]
 
 
@@ -49,14 +50,10 @@ BioneuronWarningCallback = ctypes.CFUNCTYPE(None, ctypes.c_char_p,
 
 
 def default_progress_callback(n_done, n_total):
-    try:
-        sys.stderr.write("\rSolved {}/{} neuron weights".format(
-            n_done, n_total))
-        sys.stderr.flush()
-    except KeyboardInterrupt:
-        return False
+    sys.stderr.write("\rSolved {}/{} neuron weights".format(
+        n_done, n_total))
+    sys.stderr.flush()
     return True
-
 
 def default_warning_callback(msg, idx):
     print("WARN: " + msg)
@@ -121,6 +118,25 @@ def _load_dll():
 
     return DLL
 
+class SigIntHandler:
+    def __init__(self):
+        self._old_handler = None
+        self._args = None
+        self.done = False
+
+    def __enter__(self):
+        def handler(*args):
+            self._args = args
+            self.done = True
+        self._old_handler = signal.signal(signal.SIGINT, handler)
+        return self
+
+    def __exit__(self, type, value, traceback):
+        if self._old_handler:
+            signal.signal(signal.SIGINT, self._old_handler)
+            if self.done:
+                self._old_handler(*self._args)
+            self._old_handler = None
 
 def solve(Apre,
           Jpost,
@@ -132,6 +148,7 @@ def solve(Apre,
           tol=None,
           reg=None,
           use_lstsq=False,
+          return_objective_vals=False,
           progress_callback=default_progress_callback,
           warning_callback=default_warning_callback,
           n_threads=0):
@@ -167,6 +184,8 @@ def solve(Apre,
         Regularisation. Default is 1e-1
     use_lstsq:
         Ignored. For compatibility with the nengo_bio internal solver.
+    return_objective_vals:
+        If true, returns the achieved objective values.
     progress_callback:
         Function that is regularly being called with the current progress. May
         return "False" to cancel the solving process, must return "True"
@@ -220,6 +239,8 @@ def solve(Apre,
     c_model_weights = ws.astype(dtype=np.float64, order='C', copy=False)
     c_we = np.zeros((Npre, Npost), dtype=np.float, order='C')
     c_wi = np.zeros((Npre, Npost), dtype=np.float, order='C')
+    if return_objective_vals:
+        c_objective_vals = np.zeros((Npost,), dtype=np.float, order='C')
 
     # Matrix conversion helper functions
     def PDouble(mat):
@@ -244,22 +265,34 @@ def solve(Apre,
     problem.non_negative = nonneg
     problem.synaptic_weights_exc = PDouble(c_we)
     problem.synaptic_weights_inh = PDouble(c_wi)
+    problem.objective_vals = PDouble(c_objective_vals) if return_objective_vals else None
 
-    params = BioneuronSolverParameters()
-    params.renormalise = renormalise
-    params.tolerance = tol
-    params.progress = BioneuronProgressCallback(
-        0 if progress_callback is None else progress_callback)
-    params.warn = BioneuronWarningCallback(
-        0 if warning_callback is None else warning_callback)
-    params.n_threads = n_threads
+    # Progress wrapper
+    with SigIntHandler() as sig_int_handler:
+        def progress_callback_wrapper(n_done, n_total):
+            if sig_int_handler.done:
+                return False
+            if progress_callback:
+                return progress_callback(n_done, n_total)
+            return True
 
-    # Actually run the solver
-    err = _dll.bioneuronqp_solve(ctypes.pointer(problem),
-                                 ctypes.pointer(params))
+        params = BioneuronSolverParameters()
+        params.renormalise = renormalise
+        params.tolerance = tol
+        params.progress = BioneuronProgressCallback(progress_callback_wrapper)
+        params.warn = BioneuronWarningCallback(
+            0 if warning_callback is None else warning_callback)
+        params.n_threads = n_threads
+
+        # Actually run the solver
+        err = _dll.bioneuronqp_solve(ctypes.pointer(problem),
+                                    ctypes.pointer(params))
+
     if err != 0:
         raise RuntimeError(_dll.bioneuronqp_strerr(err))
 
+    if return_objective_vals:
+        return c_we, c_wi, c_objective_vals
     return c_we, c_wi
 
 
@@ -334,15 +367,27 @@ if __name__ == "__main__":
     # Actual test code                                                        #
     ###########################################################################
 
-    def RMS(e):
-        return np.sqrt(np.mean(np.square(e)))
+    def compute_error(J_tar, J_dec, i_th):
+        if i_th is None:
+            e_invalid = 0
+            e_valid = np.sum(np.square(J_tar - J_dec))
+        else:
+            valid = J_tar > i_th
+            invalid_violated = np.logical_and(J_tar < i_th, J_dec > i_th)
+            e_invalid = np.sum(np.square(i_th - J_dec[invalid_violated]))
+            e_valid = np.sum(np.square(J_tar[valid] - J_dec[valid]))
+
+        return np.sqrt((e_valid + e_invalid) / J_tar.size)
+
+    def E(Apre, Jpost, WE, WI, iTh):
+        return compute_error(Jpost.T, Apre.T @ WE - Apre.T @ WI, iTh)
 
     np.random.seed(34812)
 
     ens1 = Ensemble(101, 1)
     ens2 = Ensemble(102, 1)
 
-    xs = np.linspace(-1, 1, 1000).reshape(1, -1)
+    xs = np.linspace(-1, 1, 100).reshape(1, -1)
     Apre = ens1(xs)
     Jpost = ens2.J(xs)
 
@@ -352,10 +397,10 @@ if __name__ == "__main__":
         "Apre": Apre.T,
         "Jpost": Jpost.T,
         "ws": ws,
-        "iTh": None,
-        "tol": 1e-4,
-        "reg": 1e-1,
-        "renormalise": True,
+        "iTh": None,#1.0,
+        "tol": 1e-1,
+        "reg": 1e-2,
+        "renormalise": False,
     }
 
     print("Solving weights using libbioneuronqp...")
@@ -364,12 +409,8 @@ if __name__ == "__main__":
     sys.stderr.write('\n')
     t2 = time.perf_counter()
     print("Time : ", t2 - t1)
-    print("Error: ", RMS(Jpost.T - Apre.T @ WE - Apre.T @ WI))
+    print("Error: ", E(Apre, Jpost, WE, WI, kwargs['iTh']))
     print()
-
-    ###########################################################################
-    # Plotting                                                                #
-    ###########################################################################
 
     if not solve_ref is None:
         print("Solving weights using nengobio.qp_solver (cvxopt)")
@@ -377,8 +418,12 @@ if __name__ == "__main__":
         WE_ref, WI_ref = solve_ref(**kwargs)
         t2 = time.perf_counter()
         print("Time : ", t2 - t1)
-        print("Error: ", RMS(Jpost.T - Apre.T @ WE_ref - Apre.T @ WI_ref))
+        print("Error: ", E(Apre, Jpost, WE_ref, WI_ref, kwargs['iTh']))
         print()
+
+    ###########################################################################
+    # Plotting                                                                #
+    ###########################################################################
 
     if not plt is None:
         if solve_ref is None:

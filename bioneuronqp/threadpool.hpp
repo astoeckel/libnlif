@@ -35,7 +35,7 @@ public:
 	~Threadpool();
 
 	void run(unsigned int n_work_items, const Kernel &kernel,
-	         const Progress &progress = Progress());
+	         Progress progress = Progress());
 };
 
 #endif /* BIONEURONQP_THREADPOOL_HPP */

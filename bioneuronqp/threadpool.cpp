@@ -115,7 +115,7 @@ public:
 	}
 
 	void run(unsigned int n_work_items, const Kernel &kernel,
-	         const Progress &progress)
+	         Progress progress)
 	{
 		// Set the current kernel
 		m_kernel = kernel;
@@ -134,7 +134,10 @@ public:
 			std::unique_lock<std::mutex> lock(m_main_mtx);
 			m_main_cond.wait_for(lock, std::chrono::milliseconds(100));
 			if (progress) {
-				progress(m_work_complete, m_max_work_idx);
+				if (!progress(m_work_complete, m_max_work_idx)) {
+					m_cur_work_idx.store(m_max_work_idx);
+					progress = nullptr;
+				}
 			}
 		}
 
@@ -150,7 +153,7 @@ Threadpool::Threadpool(unsigned int n_threads) : m_impl(new Impl(n_threads)) {}
 Threadpool::~Threadpool() {}
 
 void Threadpool::run(unsigned int n_work_items, const Kernel &kernel,
-                     const Progress &progress)
+                     Progress progress)
 {
 	m_impl->run(n_work_items, kernel, progress);
 }
