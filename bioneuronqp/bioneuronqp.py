@@ -45,6 +45,7 @@ PBioneuronWeightProblem = ctypes.POINTER(BioneuronWeightProblem)
 
 BioneuronProgressCallback = ctypes.CFUNCTYPE(ctypes.c_ubyte, ctypes.c_int,
                                              ctypes.c_int)
+
 BioneuronWarningCallback = ctypes.CFUNCTYPE(None, ctypes.c_char_p,
                                             ctypes.c_int)
 
@@ -119,22 +120,33 @@ def _load_dll():
     return DLL
 
 class SigIntHandler:
+    """
+    Class responsible for canceling the neuron weight solving process whenever
+    the SIGINT event is received.
+    """
+
     def __init__(self):
         self._old_handler = None
         self._args = None
-        self.done = False
+        self.triggered = False
 
     def __enter__(self):
         def handler(*args):
             self._args = args
-            self.done = True
-        self._old_handler = signal.signal(signal.SIGINT, handler)
+            self.triggered = True
+        try:
+            self._old_handler = signal.signal(signal.SIGINT, handler)
+        except ValueError:
+            # Ignore errors -- this is most likely triggered when
+            # signal.signal is not called from the main thread. This is e.g.
+            # what happens in Nengo GUI.
+            pass
         return self
 
     def __exit__(self, type, value, traceback):
         if self._old_handler:
             signal.signal(signal.SIGINT, self._old_handler)
-            if self.done:
+            if self.triggered:
                 self._old_handler(*self._args)
             self._old_handler = None
 
@@ -270,7 +282,7 @@ def solve(Apre,
     # Progress wrapper
     with SigIntHandler() as sig_int_handler:
         def progress_callback_wrapper(n_done, n_total):
-            if sig_int_handler.done:
+            if sig_int_handler.triggered:
                 return False
             if progress_callback:
                 return progress_callback(n_done, n_total)
