@@ -114,7 +114,9 @@ QPResult _solve_qp(SpMatrixXd &P, VectorXd &q, SpMatrixXd &G, VectorXd &h,
 	osqp_solve(work);
 
 	// Copy the results to the output arrays
-	VectorXd res = Map<VectorXd>(work->solution->x, P.rows());
+	QPResult res;
+	res.x = Map<VectorXd>(work->solution->x, P.rows());
+	res.objective_val = work->info->obj_val;
 
 	// Cleanup the workspace
 	osqp_cleanup(work);
