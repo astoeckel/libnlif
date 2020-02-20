@@ -239,6 +239,11 @@ def solve(Apre,
         assert ws.shape[0] == Npost and ws.shape[1] == 6, \
             "Invalid model weight matrix shape"
 
+    # Make sure the connection matrix has the correct size
+    assert connection_matrix.shape[0] == 2
+    assert connection_matrix.shape[1] == Npre
+    assert connection_matrix.shape[2] == Npost
+
     # Make sure all matrices are in the correct format
     c_a_pre = Apre.astype(dtype=np.float64, order='C', copy=False)
     c_j_post = Jpost.astype(dtype=np.float64, order='C', copy=False)
