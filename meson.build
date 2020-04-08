@@ -74,4 +74,5 @@ lib_bioneuronqp = library(
 	dependencies: [dep_threads],
 	include_directories: [include_extern, include_eigen3],
 	link_with: [lib_osqp],
+	install: true
 )

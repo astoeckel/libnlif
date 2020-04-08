@@ -4,12 +4,12 @@ This is a fast weight solver for Two-Compartment LIF neurons using the [OSQP lib
 
 ## Compiling
 
-This library has no run-time dependencies. To build, you'll need a C++11 compliant C++ compiler and a C99 compliant C compiler.
+This library depends on Eigen3. Furthermore, to build, you'll need a C++11 compliant C++ compiler and a C99 compliant C compiler.
 
-This library uses the `meson` build system, which uses `ninja`. To install both, run
+This library uses the `meson` build system, which in turn uses `ninja` (a replacement for `make`). To install all dependencies, run
 ```sh
-sudo dnf install ninja-build # Fedora, RedHat, CentOS
-sudo apt-get install ninja-build # Ubuntu, Debian
+sudo dnf install ninja-build eigen3-devel # Fedora, RedHat, CentOS
+sudo apt-get install ninja-build libeigen3-dev # Ubuntu, Debian
 sudo pip3 install meson
 ```
 
@@ -24,6 +24,11 @@ ninja
 To test the code, run
 ```sh
 LD_LIBRARY_PATH=. python3 ../bioneuronqp/bioneuronqp.py
+```
+
+You can install the library by running
+```sh
+sudo ninja install
 ```
 
 ## License

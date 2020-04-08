@@ -57,13 +57,14 @@ def default_progress_callback(n_done, n_total):
     return True
 
 def default_warning_callback(msg, idx):
-    print("WARN: " + msg)
+    print("WARN: " + str(msg, "utf-8"))
 
 
 class BioneuronSolverParameters(ctypes.Structure):
     _fields_ = [
         ("renormalise", ctypes.c_ubyte),
         ("tolerance", ctypes.c_double),
+        ("max_iter", ctypes.c_int),
         ("progress", BioneuronProgressCallback),
         ("warn", BioneuronWarningCallback),
         ("n_threads", ctypes.c_int),
@@ -163,7 +164,8 @@ def solve(Apre,
           return_objective_vals=False,
           progress_callback=default_progress_callback,
           warning_callback=default_warning_callback,
-          n_threads=0):
+          n_threads=0,
+          max_iter=0):
     """
     Solves a synaptic weight qp problem.
 
@@ -205,6 +207,12 @@ def solve(Apre,
     warning_callback:
         Function that is being called whenever a warning is triggered. Set to
         "None" to use no progress callback.
+    n_threads:
+        Maximum number of threads to use when solving for weights. Uses all
+        available CPU cores if set to zero.
+    max_iter:
+        Maximum number of iterations to take. The default (zero) means that no
+        such limit exists.
     """
 
     # Load the solver library
@@ -296,6 +304,7 @@ def solve(Apre,
         params = BioneuronSolverParameters()
         params.renormalise = renormalise
         params.tolerance = tol
+        params.max_iter = max_iter
         params.progress = BioneuronProgressCallback(progress_callback_wrapper)
         params.warn = BioneuronWarningCallback(
             0 if warning_callback is None else warning_callback)

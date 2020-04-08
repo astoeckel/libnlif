@@ -30,10 +30,8 @@
 #include <Eigen/Sparse>
 #include <algorithm>
 #include <cmath>
-#include <iostream>
 #include <limits>
 #include <sstream>
-#include <vector>
 
 #include "osqp/osqp.h"
 #include "threadpool.hpp"
@@ -72,12 +70,13 @@ public:
 };
 
 struct QPResult {
+	int status = 0;
+	double objective_val = 0.0;
 	VectorXd x;
-	double objective_val;
 };
 
 QPResult _solve_qp(SpMatrixXd &P, VectorXd &q, SpMatrixXd &G, VectorXd &h,
-                   double tol)
+                   double tol, int max_iter)
 {
 	// Convert the P and G matrix into sparse CSC matrices
 	CSCMatrix Pcsc(P), Gcsc(G);
@@ -104,17 +103,25 @@ QPResult _solve_qp(SpMatrixXd &P, VectorXd &q, SpMatrixXd &G, VectorXd &h,
 	settings.rho = 1e-1;
 	settings.eps_rel = tol;
 	settings.eps_abs = tol;
+	if (max_iter > 0) {
+		settings.max_iter = max_iter;
+	}
 
 	// Setup workspace
+	QPResult res;
 	OSQPWorkspace *work = nullptr;
-	/*int err =*/osqp_setup(&work, &data, &settings);
-	// XXX: Handle errors?
+	res.status = osqp_setup(&work, &data, &settings);
+	if (res.status != 0) {
+		return res;
+	}
 
 	// Solve the problem
-	osqp_solve(work);
+	res.status = osqp_solve(work);
+	if (res.status == 0 && work->info->status_val < 0) {
+		res.status = work->info->status_val;
+	}
 
 	// Copy the results to the output arrays
-	QPResult res;
 	res.x = Map<VectorXd>(work->solution->x, P.rows());
 	res.objective_val = work->info->obj_val;
 
@@ -136,7 +143,7 @@ size_t sum(const T &t)
 
 QPResult _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
                            const BoolVector &valid, double i_th, double reg,
-                           double tol, bool nonneg)
+                           double tol, int max_iter, bool nonneg)
 {
 	//
 	// Step 1: Count stuff and setup indices used to partition the matrices
@@ -264,7 +271,7 @@ QPResult _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
 	//
 	// Step 3: Sovle the QP
 	//
-	return _solve_qp(Aext, bext, G, h, tol);
+	return _solve_qp(Aext, bext, G, h, tol, max_iter);
 }
 
 void _bioneuronqp_solve_single(BioneuronWeightProblem *problem,
@@ -386,17 +393,67 @@ void _bioneuronqp_solve_single(BioneuronWeightProblem *problem,
 	const double reg = problem->regularisation * LambdaScale;
 	const bool nonneg = problem->non_negative;
 	const double tol = params->tolerance;
+	const int max_iter = params->max_iter;
 	QPResult res =
-	    _solve_weights_qp(A, b, valid, i_th, reg, tol, nonneg);
+	    _solve_weights_qp(A, b, valid, i_th, reg, tol, max_iter, nonneg);
+	if (res.status != 0) {
+		std::stringstream ss;
+		ss << "Error while computing weights for post-neuron " << j << ". ";
+		switch (res.status) {
+			case OSQP_DATA_VALIDATION_ERROR:
+				ss << "Data valiation error.";
+				break;
+			case OSQP_SETTINGS_VALIDATION_ERROR:
+				ss << "Settings validation error.";
+				break;
+			case OSQP_LINSYS_SOLVER_INIT_ERROR:
+			case OSQP_LINSYS_SOLVER_LOAD_ERROR:
+				ss << "Cannot load linear solver.";
+				break;
+			case OSQP_MEM_ALLOC_ERROR:
+				ss << "Cannot allocated workspace memory.";
+				break;
+#ifdef OSQP_TIME_LIMIT_REACHED
+			case OSQP_TIME_LIMIT_REACHED:
+				ss << "Time limit reached.";
+				break;
+#endif /* OSQP_TIME_LIMIT_REACHED */
+			case OSQP_MAX_ITER_REACHED:
+				ss << "Maximum numbers of iterations reached.";
+				break;
+			case OSQP_PRIMAL_INFEASIBLE:
+				ss << "Primal infeasible.";
+				break;
+			case OSQP_DUAL_INFEASIBLE:
+				ss << "Dual infeasible.";
+				break;
+			case OSQP_SIGINT:
+				ss << "Interrupted by user.";
+				break;
+			case OSQP_UNSOLVED:
+				ss << "Unsolved.";
+				break;
+			case OSQP_NONCVX_ERROR:
+			case OSQP_NON_CVX:
+				ss << "Problem not convex.";
+				break;
+			default:
+				ss << "Unknown/unhandled error.";
+				break;
+		}
+		params->warn(ss.str().c_str(), j);
+	}
 
 	// Distribute the resulting weights back to their correct locations
-	i_pre_exc = 0, i_pre_inh = Npre_exc;
-	for (size_t i = 0; i < Npre; i++) {
-		if (ConExc(i, j)) {
-			WExc(i, j) = res.x[i_pre_exc++] * Wscale;
-		}
-		if (ConInh(i, j)) {
-			WInh(i, j) = res.x[i_pre_inh++] * Wscale;
+	if (size_t(res.x.size()) == Npre_tot) {
+		i_pre_exc = 0, i_pre_inh = Npre_exc;
+		for (size_t i = 0; i < Npre; i++) {
+			if (ConExc(i, j)) {
+				WExc(i, j) = res.x[i_pre_exc++] * Wscale;
+			}
+			if (ConInh(i, j)) {
+				WInh(i, j) = res.x[i_pre_inh++] * Wscale;
+			}
 		}
 	}
 
@@ -411,9 +468,8 @@ BioneuronError _bioneuronqp_solve(BioneuronWeightProblem *problem,
 {
 	// Construct the kernal that is being executed -- here, we're solving the
 	// weights for a single post-neuron.
-	auto kernel = [&](size_t idx) {
-		_bioneuronqp_solve_single(problem, params, idx);
-	};
+	auto kernel =
+	    [&](size_t idx) { _bioneuronqp_solve_single(problem, params, idx); };
 
 	// Construct the progress callback
 	bool did_cancel = false;
