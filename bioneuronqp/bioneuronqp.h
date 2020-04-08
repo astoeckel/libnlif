@@ -191,6 +191,11 @@ typedef struct {
 	double tolerance;
 
 	/**
+	 * Maximum number of iterations. Zero disables any limitations.
+	 */
+	int max_iter;
+
+	/**
 	 * Callback being called to indicate progress. May be NULL if no such
 	 * callback function should be called. This function is called in
 	 * approximately 100ms intervals and may return "false" if the operation

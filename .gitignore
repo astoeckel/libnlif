@@ -3,3 +3,4 @@ build*/
 .gdb_history
 *.egg-info/
 __pycache__/
+.ipynb_checkpoints
