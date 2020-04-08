@@ -1,0 +1,4 @@
+[submodule "extern/eigen3"]
+	path = extern/eigen3
+	url = https://gitlab.com/libeigen/eigen
+	branch = origin/3.3.7

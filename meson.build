@@ -25,12 +25,12 @@ project(
 	])
 
 include_osqp = include_directories('extern/osqp')
+include_eigen3 = include_directories('extern/eigen3')
 include_extern = include_directories('extern')
 
 cc = meson.get_compiler('c')
 dep_m = cc.find_library('m', required : false)
 
-dep_eigen3 = dependency('eigen3')
 dep_threads = dependency('threads')
 
 lib_osqp = static_library(
@@ -71,7 +71,7 @@ lib_bioneuronqp = library(
 		'bioneuronqp/bioneuronqp.cpp',
 		'bioneuronqp/threadpool.cpp',
 	],
-	dependencies: [dep_eigen3, dep_threads],
-	include_directories: [include_extern],
+	dependencies: [dep_threads],
+	include_directories: [include_extern, include_eigen3],
 	link_with: [lib_osqp],
 )
