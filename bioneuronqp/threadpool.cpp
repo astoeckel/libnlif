@@ -62,10 +62,11 @@ private:
 
 			// Prevent each thread from doing the same work twice (because
 			// m_pool_cond max wake up spuriously)
-			if (self->m_done || (self->m_generation <= generation)) {
+			const uint64_t current_generation = self->m_generation;
+			if (self->m_done || (current_generation <= generation)) {
 				continue;
 			}
-			generation = self->m_generation;
+			generation = current_generation;
 
 			// Work on each work item
 			const unsigned int max_work_idx = self->m_max_work_idx;
@@ -139,9 +140,9 @@ public:
 					progress = nullptr;
 				}
 			}
-		}
 
-		std::atomic_thread_fence(std::memory_order_acquire);
+			std::atomic_thread_fence(std::memory_order_acquire);
+		}
 	}
 };
 
