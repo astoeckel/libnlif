@@ -171,15 +171,6 @@ QPResult _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
 	// Step 2: Assemble the QP matrices
 	//
 
-	// We need balance the regularisation error for the super- (valid) and
-	// sub-threshold (invalid) constraints. This is done by dividing by the
-	// number of valid/invalid constraints. We need to multiply with the number
-	// of constraints since the regularisation factor has been chosen in such a
-	// way that the errors are implicitly divided by the number of constraints.
-	const double m1 =
-	    std::sqrt(double(n_cstr) / std::max<double>(1.0, n_cstr_valid));
-	const double m2 = double(n_cstr) / std::max<double>(1.0, n_slack);
-
 	// Compute a dense matrix containing the valid constraints and fill the
 	// target vector b
 	MatrixXd Avalid(n_cstr_valid, n_vars);
@@ -188,9 +179,9 @@ QPResult _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
 	for (size_t i = 0; i < n_cstr; i++) {
 		if (valid[i]) {
 			for (size_t j = 0; j < n_vars; j++) {
-				Avalid(i_valid, v0 + j) = A(i, j) * m1;
+				Avalid(i_valid, v0 + j) = A(i, j);
 			}
-			bvalid[i_valid] = b[i] * m1;
+			bvalid[i_valid] = b[i];
 			i_valid++;
 		}
 	}
@@ -200,8 +191,9 @@ QPResult _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
 	ATAvalid.noalias() = Avalid.transpose() * Avalid;
 
 	// Add the square regularisation term to Avalid
+	const double lambda = double(n_cstr) * reg;
 	for (size_t i = v0; i < v1; i++) {
-		ATAvalid(i, i) += reg;
+		ATAvalid(i, i) += lambda;
 	}
 
 	// Compute the sparsity pattern of Aext
@@ -337,9 +329,6 @@ void _bioneuronqp_solve_single(BioneuronWeightProblem *problem,
 		// Set ws[1]=1 for better numerical stability/conditioning
 		ws /= ws[1];
 	}
-
-	// Account for the number of samples in the regularisation factor
-	LambdaScale *= double(Nsamples);
 
 	// Demangle the weight vector
 	double a0 = ws[0], a1 = ws[1], a2 = ws[2], b0 = ws[3], b1 = ws[4],
