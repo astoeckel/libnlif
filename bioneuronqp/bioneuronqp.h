@@ -31,6 +31,9 @@
 extern "C" {
 #endif
 
+/**
+ * Enum describing possible return values of bioneuronqp_solve.
+ */
 typedef enum {
 	BN_ERR_OK = 0,
 	BN_ERR_INVALID_N_PRE = -1,
@@ -149,18 +152,6 @@ typedef struct {
 } BioneuronWeightProblem;
 
 /**
- * Creates a new BioneuronWeightProblem struct and fills it with some sane
- * default values.
- */
-BioneuronWeightProblem *bioneuronqp_problem_create();
-
-/**
- * Frees a previously created BioneuronWeightProblem struct. Does not free the
- * memory regions "problem" is pointing at.
- */
-void bioneuronqp_problem_free(BioneuronWeightProblem *problem);
-
-/**
  * Callback function type used to inform the caller about the current progress
  * of the weight solving process. Must return "true" if the computation should
  * continue; returning "false" cancels the computation and bioneuronqp_solve
@@ -215,9 +206,15 @@ typedef struct {
 	int n_threads;
 } BioneuronSolverParameters;
 
-BioneuronSolverParameters *bioneuronqp_solver_parameters_create();
+/**
+ * Fills a BioneuronWeightProblem instance with default values.
+ */
+void bioneuronqp_weight_problem_init(BioneuronWeightProblem *problem);
 
-void bioneuronqp_solver_parameters_free(BioneuronSolverParameters *params);
+/**
+ * Fills a BioneuronSolverParameters instance with default values.
+ */
+void bioneuronqp_solver_parameters_init(BioneuronSolverParameters *params);
 
 BioneuronError bioneuronqp_solve(BioneuronWeightProblem *problem,
                                BioneuronSolverParameters *params);

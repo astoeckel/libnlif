@@ -24,7 +24,13 @@
  * @author Andreas Stöckel
  */
 
+//#define BQP_DEBUG
+
 #include "bioneuronqp.h"
+
+#ifdef BQP_DEBUG
+#include <iostream>
+#endif
 
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
@@ -47,6 +53,10 @@ using MatrixMap = Map<Matrix<double, Dynamic, Dynamic, Eigen::RowMajor>>;
 using BoolMatrixMap =
     Map<Matrix<unsigned char, Dynamic, Dynamic, Eigen::RowMajor>>;
 using BoolVector = Matrix<unsigned char, Dynamic, 1>;
+
+#ifdef BQP_DEBUG
+IOFormat CleanFmt(4, 0, ", ", "\n", "[", "]");
+#endif
 
 namespace {
 class CSCMatrix {
@@ -80,6 +90,11 @@ QPResult _solve_qp(SpMatrixXd &P, VectorXd &q, SpMatrixXd &G, VectorXd &h,
 {
 	// Convert the P and G matrix into sparse CSC matrices
 	CSCMatrix Pcsc(P), Gcsc(G);
+
+#ifdef BQP_DEBUG
+	std::cout << "P =\n" << MatrixXd(P).format(CleanFmt) << std::endl;
+	std::cout << "q =\n" << MatrixXd(q).format(CleanFmt) << std::endl;
+#endif
 
 	// Generate a lower bound matrix
 	VectorXd l =
@@ -215,7 +230,7 @@ QPResult _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
 	}
 	// Penalize slack variables
 	for (size_t i = v1; i < v2; i++) {
-		Aext.insert(i, i) = m2;
+		Aext.insert(i, i) = 1.0;
 	}
 
 	// Compute -Avalid.transpose() * bvalid and store the result in a larger
@@ -259,6 +274,13 @@ QPResult _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
 			G.insert(g1 + i, v0 + i) = -1;
 		}
 	}
+
+#ifdef BQP_DEBUG
+	std::cout << "Aext = \n" << MatrixXd(Aext).format(CleanFmt) << std::endl;
+	std::cout << "bext = \n" << MatrixXd(bext).format(CleanFmt) << std::endl;
+	std::cout << "G    = \n" << MatrixXd(G).format(CleanFmt) << std::endl;
+	std::cout << "h    = \n" << MatrixXd(h).format(CleanFmt) << std::endl;
+#endif
 
 	//
 	// Step 3: Sovle the QP
@@ -385,6 +407,10 @@ void _bioneuronqp_solve_single(BioneuronWeightProblem *problem,
 	const int max_iter = params->max_iter;
 	QPResult res =
 	    _solve_weights_qp(A, b, valid, i_th, reg, tol, max_iter, nonneg);
+#ifdef BQP_DEBUG
+	std::cout << "x = \n" << res.x.format(CleanFmt) << std::endl;
+	std::cout << "status = " << res.status << std::endl;
+#endif
 	if (res.status != 0) {
 		std::stringstream ss;
 		ss << "Error while computing weights for post-neuron " << j << ". ";
@@ -535,9 +561,8 @@ const char *bioneuronqp_strerr(BioneuronError err)
 #define DEFAULT_REGULARISATION 1e-1
 #define DEFAULT_TOLERANCE 1e-6;
 
-BioneuronWeightProblem *bioneuronqp_problem_create()
+void bioneuronqp_weight_problem_init(BioneuronWeightProblem *problem)
 {
-	BioneuronWeightProblem *problem = new BioneuronWeightProblem;
 	problem->n_pre = 0;
 	problem->n_post = 0;
 	problem->n_samples = 0;
@@ -552,32 +577,19 @@ BioneuronWeightProblem *bioneuronqp_problem_create()
 	problem->non_negative = 0;
 	problem->synaptic_weights_exc = 0;
 	problem->synaptic_weights_inh = 0;
-	return problem;
-}
-
-void bioneuronqp_problem_free(BioneuronWeightProblem *problem)
-{
-	delete problem;
 }
 
 /******************************************************************************
  * Struct BioneuronSolverParameters                                           *
  ******************************************************************************/
 
-BioneuronSolverParameters *bioneuronqp_solver_parameters_create()
+void bioneuronqp_solver_parameters_init(BioneuronSolverParameters *params)
 {
-	BioneuronSolverParameters *params = new BioneuronSolverParameters;
 	params->renormalise = 1;
 	params->tolerance = DEFAULT_TOLERANCE;
 	params->progress = nullptr;
 	params->warn = nullptr;
 	params->n_threads = 0;
-	return params;
-}
-
-void bioneuronqp_solver_parameters_free(BioneuronSolverParameters *params)
-{
-	delete params;
 }
 
 /******************************************************************************

@@ -99,20 +99,6 @@ def _load_dll():
         DLL.bioneuronqp_strerr.argtypes = [ctypes.c_int]
         DLL.bioneuronqp_strerr.restype = ctypes.c_char_p
 
-        DLL.bioneuronqp_problem_create.argtypes = []
-        DLL.bioneuronqp_problem_create.restype = PBioneuronWeightProblem
-
-        DLL.bioneuronqp_problem_free.argtypes = [PBioneuronWeightProblem]
-        DLL.bioneuronqp_problem_free.restype = None
-
-        DLL.bioneuronqp_solver_parameters_create.argtypes = []
-        DLL.bioneuronqp_solver_parameters_create.restype = PBioneuronSolverParameters
-
-        DLL.bioneuronqp_solver_parameters_free.argtypes = [
-            PBioneuronSolverParameters
-        ]
-        DLL.bioneuronqp_solver_parameters_free.restype = None
-
         DLL.bioneuronqp_solve.argtypes = [
             PBioneuronWeightProblem, PBioneuronSolverParameters
         ]
