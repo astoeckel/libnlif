@@ -434,7 +434,7 @@ void _bioneuronqp_solve_single(BioneuronWeightProblem *problem,
 	}
 
 	// Distribute the resulting weights back to their correct locations
-	if (size_t(res.x.size()) == Npre_tot) {
+	if (size_t(res.x.size()) >= Npre_tot) {
 		i_pre_exc = 0, i_pre_inh = Npre_exc;
 		for (size_t i = 0; i < Npre; i++) {
 			if (ConExc(i, j)) {
