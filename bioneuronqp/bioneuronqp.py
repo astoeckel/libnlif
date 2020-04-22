@@ -477,7 +477,7 @@ def make_loss_function(
 
         # Compute the quadratic sub-threshold loss
         L_quad_sub = np.sum(np.square(
-            np.maximum(j_th, j_hat_subth).T - j_tar_subth.T).T, axis=0)
+            np.maximum(j_th, j_hat_subth).T - j_th).T, axis=0)
 
         # Compute the regularisation error
         L_reg = lambda_ * n_samples * (np.sum(np.square(w_exc), axis=0) +
