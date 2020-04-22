@@ -1,5 +1,5 @@
 # libbioneuronqp
-**A synaptic weight solver single and two-comparment LIF neurons with current- or conductance-based synapses**
+**A synaptic weight solver for single and two-comparment LIF neurons with current- or conductance-based synapses.**
 
 ![Visualisation of the synaptic weight space of a low-dimensional toy problem.](doc/weight_space.png)
 
