@@ -1,5 +1,7 @@
 # libBioNeuronQP ‒ Fast Two-Comp LIF weight solver
 
+![Visualisation of the synaptic weight space of a low-dimensional toy problem.](doc/weight_space.png)
+
 This is a fast weight solver for Two-Compartment LIF neurons using the [OSQP library](https://www.osqp.org/) written in C++ with a C API. The code is supposed to be used via the supplied Python binding.
 
 ## Compiling
