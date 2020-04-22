@@ -16,11 +16,11 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <algorithm>
 #include <atomic>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
-#include <iostream>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -35,11 +35,9 @@ class Threadpool::Impl {
 private:
 	using Kernel = std::function<void(size_t)>;
 	std::atomic<uint64_t> m_generation;
-	std::atomic<bool> m_ready;
 	std::atomic<bool> m_done;
 	std::atomic<unsigned int> m_max_work_idx;
 	std::atomic<unsigned int> m_cur_work_idx;
-	std::atomic<unsigned int> m_work_complete;
 	std::atomic<unsigned int> m_workers_done;
 	std::condition_variable m_pool_cond;
 	std::condition_variable m_main_cond;
@@ -53,15 +51,18 @@ private:
 	{
 		uint64_t generation = 0;
 		while (!self->m_done) {
-			// Wait for a new work order
+			// Wait for a new work order, but at most 100ms
 			{
 				std::unique_lock<std::mutex> lock(self->m_pool_mtx);
-				self->m_pool_cond.wait(
-				    lock, [self] { return self->m_ready || self->m_done; });
+				self->m_pool_cond.wait_for(lock,
+				                           std::chrono::milliseconds(100));
 			}
 
+			// Make sure we see any update to the variables accessed below
+			std::atomic_thread_fence(std::memory_order_acquire);
+
 			// Prevent each thread from doing the same work twice (because
-			// m_pool_cond max wake up spuriously)
+			// m_pool_cond may wake up spuriously)
 			const uint64_t current_generation = self->m_generation;
 			if (self->m_done || (current_generation <= generation)) {
 				continue;
@@ -79,12 +80,13 @@ private:
 					break;
 				}
 				self->m_kernel(cur_work_idx);
-				self->m_work_complete++;
 			}
 
-			// Notify the main thread
-			std::atomic_thread_fence(std::memory_order_release);
+			// This worker is done, increment the counter
 			self->m_workers_done++;
+			std::atomic_thread_fence(std::memory_order_release);
+
+			// Notify the main thread
 			self->m_main_cond.notify_one();
 		}
 	}
@@ -92,11 +94,9 @@ private:
 public:
 	Impl(unsigned int n_threads)
 	    : m_generation(0U),
-	      m_ready(false),
 	      m_done(false),
 	      m_max_work_idx(0U),
-	      m_cur_work_idx(0U),
-	      m_work_complete(0U)
+	      m_cur_work_idx(0U)
 	{
 		if (n_threads == 0) {
 			n_threads = std::max(std::thread::hardware_concurrency(), 1U);
@@ -108,40 +108,67 @@ public:
 
 	~Impl()
 	{
+		// Set m_done to true and make sure that all threads can see this update
 		m_done = true;
+		std::atomic_thread_fence(std::memory_order_release);
+
+		// Notify all threads about the state update
 		m_pool_cond.notify_all();
+
+		// Wait for all threads to finish
 		for (size_t i = 0; i < m_pool.size(); i++) {
 			m_pool[i].join();
 		}
 	}
 
-	void run(unsigned int n_work_items, const Kernel &kernel,
-	         Progress progress)
+	void run(unsigned int n_work_items, const Kernel &kernel, Progress progress)
 	{
 		// Set the current kernel
 		m_kernel = kernel;
 		m_max_work_idx = n_work_items;
 		m_cur_work_idx = 0U;
-		m_work_complete = 0U;
 		m_workers_done = 0U;
+
+		// Make sure that the above variables are set before the generation
+		// number is increased.
+		std::atomic_thread_fence(std::memory_order_release);
+
+		// Increment the generation. This must be the last operation, since a
+		// spuriously waking thread will start working as soon as the generation
+		// number is incremented.
 		m_generation++;
-		m_ready = true;
+
+		// Make sure all memory updates are visible to the thread
+		std::atomic_thread_fence(std::memory_order_release);
 
 		// Notify all threads
 		m_pool_cond.notify_all();
 
 		// Wait for all work items to be completed
 		while (m_workers_done < m_pool.size()) {
+			// Wait for a notification from a child thread about being done,
+			// but at most 100 milliseconds
 			std::unique_lock<std::mutex> lock(m_main_mtx);
 			m_main_cond.wait_for(lock, std::chrono::milliseconds(100));
+
+			// Notify the caller about any progress
 			if (progress) {
-				if (!progress(m_work_complete, m_max_work_idx)) {
-					m_cur_work_idx.store(m_max_work_idx);
-					progress = nullptr;
+				const unsigned int cur_work_idx =
+				    std::min<unsigned int>(m_cur_work_idx, n_work_items);
+				if (!progress(cur_work_idx, n_work_items)) {
+					m_cur_work_idx = n_work_items;
+					progress = nullptr;  // No longer call the callback
 				}
 			}
 
+			// Make sure we see any update to the m_workers_done variable
 			std::atomic_thread_fence(std::memory_order_acquire);
+		}
+
+		// Call the progress callback one last time to ensure that something
+		// along the lines of "100%" done can be displayed.
+		if (progress) {
+			progress(n_work_items, n_work_items);
 		}
 	}
 };
