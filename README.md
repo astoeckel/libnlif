@@ -7,11 +7,18 @@
 
 ## Compiling
 
-All dependencies are included in the repository. You'll just need a C++11 compliant C++ compiler and a C99 compliant C compiler. Furthermor, this library uses the `meson` build system, which in turn uses `ninja` (a replacement for `make`). To install all dependencies, run
+All dependencies are included in the repository. You'll just need a C++11 compliant C++ compiler and a C99 compliant C compiler. While this code should theoretically compile on Windows and MacOS, it has only been tested on Linux so far.
+
+*libbioneuronqp* uses the `meson` build system, which in turn depends on `ninja` (a replacement for `make`). To install all dependencies, run
 ```sh
-sudo dnf install ninja-build # Fedora, RedHat, CentOS
-sudo apt-get install ninja-build # Ubuntu, Debian
-sudo pip3 install meson # You may have to use "pip" instead of "pip3"
+# On Fedora, RedHat, CentOS
+sudo dnf install ninja-build
+
+# On Ubuntu, Debian
+sudo apt-get install ninja-build
+
+# You may have to use "pip" instead of "pip3"
+sudo pip3 install meson
 ```
 
 Then, to compile the library, simply run
