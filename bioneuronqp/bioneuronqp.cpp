@@ -115,9 +115,11 @@ QPResult _solve_qp(SpMatrixXd &P, VectorXd &q, SpMatrixXd &G, VectorXd &h,
 	osqp_set_default_settings(&settings);
 	settings.scaling = 0;
 	settings.scaled_termination = 0;
-	settings.rho = 1e-1;
+	settings.rho = 1e-1; // Default value
 	settings.eps_rel = tol;
 	settings.eps_abs = tol;
+	settings.polish = true;
+	settings.polish_refine_iter = 3; // Default value
 	if (max_iter > 0) {
 		settings.max_iter = max_iter;
 	}
