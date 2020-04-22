@@ -510,6 +510,11 @@ if __name__ == "__main__":
     # Imports                                                                 #
     ###########################################################################
 
+    # Import some code used in the test classes
+    import sys, os
+    sys.path.append(os.path.join(os.path.dirname(__file__), 'tests'))
+    from test_bioneuronqp import LIF, Ensemble
+
     # Used for measuring the ellapsed time
     import time
 
@@ -524,49 +529,6 @@ if __name__ == "__main__":
         import matplotlib.pyplot as plt
     except ImportError:
         plt = None
-
-    ###########################################################################
-    # Micro implementation of the NEF                                         #
-    ###########################################################################
-
-    class LIF:
-        slope = 2.0 / 3.0
-
-        @staticmethod
-        def inverse(a):
-            valid = a > 0
-            return 1.0 / (1.0 - np.exp(LIF.slope - (1.0 / (valid * a + 1e-6))))
-
-        @staticmethod
-        def activity(x):
-            valid = x > (1.0 + 1e-6)
-            return valid / (LIF.slope - np.log(1.0 - valid * (1.0 / x)))
-
-    class Ensemble:
-        def __init__(self, n_neurons, n_dimensions, neuron_type=LIF):
-            self.neuron_type = neuron_type
-
-            # Randomly select the intercepts and the maximum rates
-            self.intercepts = np.random.uniform(-0.95, 0.95, n_neurons)
-            self.max_rates = np.random.uniform(0.5, 1.0, n_neurons)
-
-            # Randomly select the encoders
-            self.encoders = np.random.normal(0, 1, (n_neurons, n_dimensions))
-            self.encoders /= np.linalg.norm(self.encoders, axis=1)[:, None]
-
-            # Compute the current causing the maximum rate/the intercept
-            J_0 = self.neuron_type.inverse(0)
-            J_max_rates = self.neuron_type.inverse(self.max_rates)
-
-            # Compute the gain and bias
-            self.gain = (J_0 - J_max_rates) / (self.intercepts - 1.0)
-            self.bias = J_max_rates - self.gain
-
-        def __call__(self, x):
-            return self.neuron_type.activity(self.J(x))
-
-        def J(self, x):
-            return self.gain[:, None] * self.encoders @ x + self.bias[:, None]
 
     ###########################################################################
     # Actual test code                                                        #
@@ -602,10 +564,10 @@ if __name__ == "__main__":
         "Apre": Apre.T,
         "Jpost": Jpost.T,
         "ws": ws,
-        "iTh": None,#1.0,
-        "tol": 1e-1,
+        "iTh": 0.0,
+        "tol": 1e-3,
         "reg": 1e-2,
-        "renormalise": False,
+        "renormalise": True,
     }
 
     print("Solving weights using libbioneuronqp...")
