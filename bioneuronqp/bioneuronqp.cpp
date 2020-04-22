@@ -368,7 +368,9 @@ void _bioneuronqp_solve_single(BioneuronWeightProblem *problem,
 			std::stringstream ss;
 			ss << "Target currents for neuron " << j << " cannot be reached! "
 			   << jPostMax << " ∉ [" << (a2 / b2) << ", " << (a1 / b2) << "]";
-			params->warn(ss.str().c_str(), j);
+			if (params->warn) {
+				params->warn(ss.str().c_str(), j);
+			}
 		}
 	}
 
@@ -461,7 +463,9 @@ void _bioneuronqp_solve_single(BioneuronWeightProblem *problem,
 				ss << "Unknown/unhandled error.";
 				break;
 		}
-		params->warn(ss.str().c_str(), j);
+		if (params->warn) {
+			params->warn(ss.str().c_str(), j);
+		}
 	}
 
 	// Distribute the resulting weights back to their correct locations
