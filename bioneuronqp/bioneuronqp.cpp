@@ -137,6 +137,9 @@ QPResult _solve_qp(SpMatrixXd &P, VectorXd &q, SpMatrixXd &G, VectorXd &h,
 	if (res.status == 0 && work->info->status_val < 0) {
 		res.status = work->info->status_val;
 	}
+#ifdef BQP_DEBUG
+	std::cout << "res.status = " << work->info->status << " res.status_polish = " << work->info->status_polish << std::endl;
+#endif
 
 	// Copy the results to the output arrays
 	res.x = Map<VectorXd>(work->solution->x, P.rows());
