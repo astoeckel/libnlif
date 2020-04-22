@@ -427,7 +427,7 @@ def make_loss_function(
         j_tar = j_tar * b0 - a0
         if not j_th is None:
             j_th = j_th * b0 - a0
-        a0, a1, a2, b0, b1, b2 = (0, 1, 1, 1, 0, 0)
+        a0, a1, a2, b0, b1, b2 = (0.0, 1.0, 1.0, 1.0, 0.0, 0.0)
 
     # Split the pre-population activities, as well as the target currents
     # into super- and sub-threshold samples
