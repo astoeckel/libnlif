@@ -270,13 +270,14 @@ QPResult _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
 	// the inequality constraints to be violated at the cost of increasing the
 	// error.
 	for (size_t i = 0; i < n_cstr_invalid; i++) {
-		G.insert(g0 + i, v1 + i) = -1;
+		G.insert(g0 + i, v1 + i) = -1.0;
 	}
 
-	// Make sure the weights are nonnegative if nonneg is set
+	// Make sure the weights are nonnegative if nonneg is set. Scale the weight
+	// a little to make violation of this constraint more costly.
 	if (nonneg) {
 		for (size_t i = 0; i < n_vars; i++) {
-			G.insert(g1 + i, v0 + i) = -1;
+			G.insert(g1 + i, v0 + i) = -100.0;
 		}
 	}
 
