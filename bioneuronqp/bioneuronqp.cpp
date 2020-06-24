@@ -290,7 +290,19 @@ QPResult _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
 	//
 	// Step 3: Sovle the QP
 	//
-	return _solve_qp(Aext, bext, G, h, tol, max_iter);
+	QPResult res = _solve_qp(Aext, bext, G, h, tol, max_iter);
+
+	//
+	// Step 4: Post-processing
+	//
+
+	// Strictly enforce weight non-negativity
+	if (nonneg) {
+		for (size_t i = v0; i < v1; i++) {
+			res.x[i] = std::max(0.0, res.x[i]);
+		}
+	}
+	return res;
 }
 
 void _bioneuronqp_solve_single(BioneuronWeightProblem *problem,
