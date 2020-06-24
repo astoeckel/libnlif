@@ -18,7 +18,7 @@
 
 import ctypes
 import numpy as np
-import sys
+import os, sys
 import signal
 
 class BioneuronWeightProblem(ctypes.Structure):
@@ -86,10 +86,16 @@ def _load_dll():
     global DLL, DLLFound
     if DLLFound is None:
         DLL = None
-        try:
-            DLL = ctypes.CDLL("libbioneuronqp.so")
-        except OSError:
-            pass
+        for search in [None, os.path.join(os.path.dirname(__file__), "../build/")]:
+            try:
+                libname = "libbioneuronqp.so"
+                libpath = libname if search is None else os.path.join(search, libname)
+                libpath = os.path.abspath(libpath)
+                DLL = ctypes.CDLL(libpath)
+                print("Found", libname, "at", libpath)
+                break
+            except OSError:
+                pass
         if DLL is None:
             DLLFound = False
             return None
