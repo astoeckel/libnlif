@@ -367,7 +367,7 @@ void _bioneuronqp_solve_single(BioneuronWeightProblem *problem,
 		if ((a1 / b1) < jPostMax) {
 			std::stringstream ss;
 			ss << "Target currents for neuron " << j << " cannot be reached! "
-			   << jPostMax << " ∉ [" << (a2 / b2) << ", " << (a1 / b2) << "]";
+			   << jPostMax << " ∉ [" << (a2 / b2) << ", " << (a1 / b1) << "]";
 			if (params->warn) {
 				params->warn(ss.str().c_str(), j);
 			}
