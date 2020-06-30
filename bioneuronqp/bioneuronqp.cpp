@@ -520,9 +520,14 @@ BioneuronError _bioneuronqp_solve(BioneuronWeightProblem *problem,
 		return true;
 	};
 
-	// Create a threadpool and solve the weights for all neurons
-	Threadpool pool(params->n_threads);
-	pool.run(problem->n_post, kernel, progress);
+	// Create a threadpool and solve the weights for all neurons. Do not create
+	// a threadpool if there is only one set of weights to solve for.
+	if (problem->n_post > 1) {
+		Threadpool pool(params->n_threads);
+		pool.run(problem->n_post, kernel, progress);
+	} else if (problem->n_post > 0) {
+		kernel(0);
+	}
 
 	return did_cancel ? BN_ERR_CANCEL : BN_ERR_OK;
 }
