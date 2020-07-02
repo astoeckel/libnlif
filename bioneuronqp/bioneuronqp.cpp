@@ -454,7 +454,7 @@ void _bioneuronqp_solve_single(BioneuronWeightProblem *problem,
 				break;
 #endif /* OSQP_TIME_LIMIT_REACHED */
 			case OSQP_MAX_ITER_REACHED:
-				ss << "Maximum numbers of iterations reached.";
+				ss << "Maximum number of iterations reached.";
 				break;
 			case OSQP_PRIMAL_INFEASIBLE:
 				ss << "Primal infeasible.";
