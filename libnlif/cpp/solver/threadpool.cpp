@@ -46,8 +46,7 @@ private:
 	std::vector<std::thread> m_pool;
 	Kernel m_kernel;
 
-	static void thread_main(Impl *self, unsigned int tidx,
-	                        unsigned int n_threads)
+	static void thread_main(Impl *self)
 	{
 		uint64_t generation = 0;
 		while (!self->m_done) {
@@ -102,7 +101,7 @@ public:
 			n_threads = std::max(std::thread::hardware_concurrency(), 1U);
 		}
 		for (unsigned int i = 0U; i < n_threads; i++) {
-			m_pool.emplace_back(thread_main, this, i, n_threads);
+			m_pool.emplace_back(thread_main, this);
 		}
 	}
 

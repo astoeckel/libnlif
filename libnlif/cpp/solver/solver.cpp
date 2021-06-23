@@ -26,7 +26,7 @@
 
 //#define BQP_DEBUG
 
-#include "bioneuronqp.h"
+#include "solver.h"
 
 #ifdef BQP_DEBUG
 #include <iostream>
@@ -521,10 +521,15 @@ BioneuronError _bioneuronqp_solve(BioneuronWeightProblem *problem,
 	};
 
 	// Create a threadpool and solve the weights for all neurons. Do not create
-	// a threadpool if there is only one set of weights to solve for.
-	if (problem->n_post > 1) {
+	// a threadpool if there is only one set of weights to solve for, or the
+	// number of threads has explicitly been set to one.
+	if ((params->n_threads != 1) && (problem->n_post > 1)) {
 		Threadpool pool(params->n_threads);
 		pool.run(problem->n_post, kernel, progress);
+	} else if (params->n_threads == 1) {
+		for (int i = 0; i < problem->n_post; i++) {
+			
+		}
 	} else if (problem->n_post > 0) {
 		kernel(0);
 	}

@@ -27,6 +27,31 @@
 #ifndef BIONEURONQP_BIONEURONQP_H
 #define BIONEURONQP_BIONEURONQP_H
 
+#if defined _WIN32 || defined __CYGWIN__
+  #ifdef BUILDING_DLL
+    #ifdef __GNUC__
+      #define DLL_PUBLIC __attribute__ ((dllexport))
+    #else
+      #define DLL_PUBLIC __declspec(dllexport) // Note: actually gcc seems to also supports this syntax.
+    #endif
+  #else
+    #ifdef __GNUC__
+      #define DLL_PUBLIC __attribute__ ((dllimport))
+    #else
+      #define DLL_PUBLIC __declspec(dllimport) // Note: actually gcc seems to also supports this syntax.
+    #endif
+  #endif
+  #define DLL_LOCAL
+#else
+  #if __GNUC__ >= 4
+    #define DLL_PUBLIC __attribute__ ((visibility ("default")))
+    #define DLL_LOCAL  __attribute__ ((visibility ("hidden")))
+  #else
+    #define DLL_PUBLIC
+    #define DLL_LOCAL
+  #endif
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -51,7 +76,7 @@ typedef enum {
 	BN_ERR_CANCEL = -13
 } BioneuronError;
 
-const char *bioneuronqp_strerr(BioneuronError err);
+DLL_PUBLIC const char *bioneuronqp_strerr(BioneuronError err);
 
 /**
  * Internally used Boolean type; this should be compatible with the C++ "bool"
@@ -209,14 +234,14 @@ typedef struct {
 /**
  * Fills a BioneuronWeightProblem instance with default values.
  */
-void bioneuronqp_weight_problem_init(BioneuronWeightProblem *problem);
+DLL_PUBLIC void bioneuronqp_weight_problem_init(BioneuronWeightProblem *problem);
 
 /**
  * Fills a BioneuronSolverParameters instance with default values.
  */
-void bioneuronqp_solver_parameters_init(BioneuronSolverParameters *params);
+DLL_PUBLIC void bioneuronqp_solver_parameters_init(BioneuronSolverParameters *params);
 
-BioneuronError bioneuronqp_solve(BioneuronWeightProblem *problem,
+DLL_PUBLIC BioneuronError bioneuronqp_solve(BioneuronWeightProblem *problem,
                                BioneuronSolverParameters *params);
 
 #ifdef __cplusplus
