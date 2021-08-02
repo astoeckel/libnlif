@@ -1,68 +1,26 @@
 #!/usr/bin/env python3
 
-#  libbioneuronqp -- Library solving for synaptic weights
-#  Copyright (C) 2020  Andreas Stöckel
+#  libnlif -- Multi-compartment LIF simulator and weight solver
+#  Copyright (C) 2020-2021  Andreas Stöckel
 #
 #  This program is free software: you can redistribute it and/or modify
-#  it under the terms of the GNU Affero General Public License as
-#  published by the Free Software Foundation, either version 3 of the
-#  License, or (at your option) any later version.
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
 #
 #  This program is distributed in the hope that it will be useful,
 #  but WITHOUT ANY WARRANTY; without even the implied warranty of
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#  GNU Affero General Public License for more details.
+#  GNU General Public License for more details.
 #
-#  You should have received a copy of the GNU Affero General Public License
+#  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import numpy as np
-import bioneuronqp
 
-###########################################################################
-# Micro-implementation of the NEF                                         #
-###########################################################################
-
-
-class LIF:
-    slope = 2.0 / 3.0
-
-    @staticmethod
-    def inverse(a):
-        valid = a > 0
-        return 1.0 / (1.0 - np.exp(LIF.slope - (1.0 / (valid * a + 1e-6))))
-
-    @staticmethod
-    def activity(x):
-        valid = x > (1.0 + 1e-6)
-        return valid / (LIF.slope - np.log(1.0 - valid * (1.0 / x)))
-
-
-class Ensemble:
-    def __init__(self, n_neurons, n_dimensions, neuron_type=LIF):
-        self.neuron_type = neuron_type
-
-        # Randomly select the intercepts and the maximum rates
-        self.intercepts = np.random.uniform(-0.95, 0.95, n_neurons)
-        self.max_rates = np.random.uniform(0.5, 1.0, n_neurons)
-
-        # Randomly select the encoders
-        self.encoders = np.random.normal(0, 1, (n_neurons, n_dimensions))
-        self.encoders /= np.linalg.norm(self.encoders, axis=1)[:, None]
-
-        # Compute the current causing the maximum rate/the intercept
-        J_0 = self.neuron_type.inverse(0)
-        J_max_rates = self.neuron_type.inverse(self.max_rates)
-
-        # Compute the gain and bias
-        self.gain = (J_0 - J_max_rates) / (self.intercepts - 1.0)
-        self.bias = J_max_rates - self.gain
-
-    def __call__(self, x):
-        return self.neuron_type.activity(self.J(x))
-
-    def J(self, x):
-        return self.gain[:, None] * self.encoders @ x + self.bias[:, None]
+from nlif.loss import make_loss_function
+from nlif.solver import Solver
+from nlif.tests.utils.nef import Ensemble
 
 
 def do_compute_weights_single_neuron_ref(A_pre_exc,
@@ -76,14 +34,14 @@ def do_compute_weights_single_neuron_ref(A_pre_exc,
                                          w_exc_init=None,
                                          w_inh_init=None):
     # Fetch the gradient of the loss function
-    dL = bioneuronqp.make_loss_function(A_pre_exc,
-                                        A_pre_inh,
-                                        j_tar,
-                                        j_th,
-                                        ws,
-                                        lambda_,
-                                        grad=True,
-                                        pre_mult_ws=True)
+    dL = make_loss_function(A_pre_exc,
+                            A_pre_inh,
+                            j_tar,
+                            j_th,
+                            ws,
+                            lambda_,
+                            grad=True,
+                            pre_mult_ws=True)
 
     # Fetch the number of pre-neurons
     n_pre_exc = A_pre_exc.shape[1]
@@ -156,7 +114,7 @@ def do_test_bioneuronqp_single(Apre,
     n_post = Jpost.shape[1]
 
     # Solve for weights using bioneuronqp
-    w_exc, w_inh = bioneuronqp.solve(
+    w_exc, w_inh = Solver().two_comp_solve(
         Apre=Apre,
         Jpost=Jpost,
         ws=ws,
@@ -213,21 +171,21 @@ def do_test_bioneuronqp_single(Apre,
         # Make sure the error is within two orders of magnitude of the given
         # tolerance
         if not ok:
-            print("Weights are returned by libbioneuronqp: ", w_exc_subs, w_inh_subs)
+            print("Weights are returned by libbioneuronqp: ", w_exc_subs,
+                  w_inh_subs)
             print("Weights after gradient descent: ", w_exc_ref, w_inh_ref)
 
         # Plot the error landscape, if requested
         if plot:
             import matplotlib.pyplot as plt
 
-            L = bioneuronqp.make_loss_function(
-                A_pre_exc,
-                A_pre_inh,
-                j_tar,
-                iTh,
-                ws,
-                reg,
-                pre_mult_ws=True)
+            L = nlif.loss.make_loss_function(A_pre_exc,
+                                             A_pre_inh,
+                                             j_tar,
+                                             iTh,
+                                             ws,
+                                             reg,
+                                             pre_mult_ws=True)
             L(w_exc_subs, w_inh_subs)
             L(w_exc_ref, w_inh_ref)
 
@@ -277,12 +235,27 @@ def do_test_bioneuronqp_single(Apre,
                             WIs[jj] = np.ones(wssx.shape) * W1[jj + n_exc]
 
                     n_sweep = np.prod(wssx.shape)
-                    E = L(WEs.reshape(n_exc, n_sweep), WIs.reshape(n_inh, n_sweep)).reshape(wssx.shape)
+                    E = L(WEs.reshape(n_exc, n_sweep),
+                          WIs.reshape(n_inh, n_sweep)).reshape(wssx.shape)
                     C = ax.contourf(wsx, wsy, np.log10(E))
-                    ax.contour(wsx, wsy, np.log10(E), levels=C.levels, colors=('white',), linestyles=('--',))
+                    ax.contour(wsx,
+                               wsy,
+                               np.log10(E),
+                               levels=C.levels,
+                               colors=('white', ),
+                               linestyles=('--', ))
 
-                    ax.plot(W0[i], W0[j], 'x', markeredgewidth=2, color='white')
-                    ax.plot(W1[i], W1[j], '+', markeredgewidth=2, color='white')
+                    ax.plot(W0[i],
+                            W0[j],
+                            'x',
+                            markeredgewidth=2,
+                            color='white')
+                    ax.plot(W1[i],
+                            W1[j],
+                            '+',
+                            markeredgewidth=2,
+                            color='white')
+
 
 #            fig.savefig('weight_space.png', bbox_inches='tight', transparent=True)
 #            fig.savefig('weight_space.pdf', bbox_inches='tight', transparent=True)
@@ -306,6 +279,7 @@ def do_test_from_dump(filename):
         reg=data['reg'],
         plot=True,
     )
+
 
 def do_test_bioneuronqp(n_pre,
                         n_post,
@@ -345,19 +319,20 @@ def do_test_bioneuronqp(n_pre,
             reg=reg,
         )
     except Exception as e:
-        np.save("test_bioneuronqp_dump.npy", {
-            "Apre": Apre,
-            "Jpost": Jpost,
-            "ws": ws,
-            "connection_matrix": connection_matrix,
-            "iTh": iTh,
-            "nonneg": nonneg,
-            "renormalise": renormalise,
-            "tol": tol,
-            "reg": reg,
-        })
+        np.save(
+            "test_bioneuronqp_dump.npy", {
+                "Apre": Apre,
+                "Jpost": Jpost,
+                "ws": ws,
+                "connection_matrix": connection_matrix,
+                "iTh": iTh,
+                "nonneg": nonneg,
+                "renormalise": renormalise,
+                "tol": tol,
+                "reg": reg,
+            })
         print("Problem dump saved to test_bioneuronqp_dump.npy")
-        raise e;
+        raise e
 
 
 def test_bioneuronqp():

@@ -16,8 +16,8 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef BIONEURONQP_THREADPOOL_HPP
-#define BIONEURONQP_THREADPOOL_HPP
+#ifndef NLIF_THREADPOOL_HPP
+#define NLIF_THREADPOOL_HPP
 
 #include <functional>
 #include <memory>
@@ -38,4 +38,4 @@ public:
 	         Progress progress = Progress());
 };
 
-#endif /* BIONEURONQP_THREADPOOL_HPP */
+#endif /* NLIF_THREADPOOL_HPP */

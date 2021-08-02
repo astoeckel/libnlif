@@ -16,4 +16,9 @@
 #  You should have received a copy of the GNU Affero General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from .bioneuronqp import solve, make_loss_function
+from .neuron import (Neuron, Connection, Compartment, Soma, CondChan, CurChan,
+                     ConductanceChannel, CurrentChannel, LIF, LIFCond,
+                     TwoCompLIFCond, ThreeCompLIFCond)
+from .simulator import Simulator
+from .internal.errors import *
+

@@ -1,34 +1,35 @@
 /*
- *  libbioneuronqp -- Library solving for synaptic weights
- *  Copyright (C) 2020  Andreas Stöckel
+ *  libnlif -- Multi-compartment LIF simulator and weight solver
+ *  Copyright (C) 2017-2021  Andreas Stöckel
  *
  *  This program is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU Affero General Public License as
- *  published by the Free Software Foundation, either version 3 of the
- *  License, or (at your option) any later version.
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU Affero General Public License for more details.
+ *  GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU Affero General Public License
+ *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 /**
- * @file bioneuron.c
+ * @file two_comp_solver.cpp
  *
- * Actual implementation of libioneuron.
+ * Provides the actual implementation of the specialised two-compartment weight
+ * solver.
  *
  * @author Andreas Stöckel
  */
 
-//#define BQP_DEBUG
+//#define NLIF_DEBUG
 
-#include "solver.h"
+#include "two_comp_solver.h"
 
-#ifdef BQP_DEBUG
+#ifdef NLIF_DEBUG
 #include <iostream>
 #endif
 
@@ -40,6 +41,9 @@
 #include <sstream>
 
 #include "osqp/osqp.h"
+
+#include "matrix_types.hpp"
+#include "qp.hpp"
 #include "threadpool.hpp"
 
 using namespace Eigen;
@@ -48,109 +52,11 @@ using namespace Eigen;
  * INTERNAL C++ CODE                                                          *
  ******************************************************************************/
 
-using SpMatrixXd = SparseMatrix<double>;
-using MatrixMap = Map<Matrix<double, Dynamic, Dynamic, Eigen::RowMajor>>;
-using BoolMatrixMap =
-    Map<Matrix<unsigned char, Dynamic, Dynamic, Eigen::RowMajor>>;
-using BoolVector = Matrix<unsigned char, Dynamic, 1>;
-
-#ifdef BQP_DEBUG
+#ifdef NLIF_DEBUG
 IOFormat CleanFmt(4, 0, ", ", "\n", "[", "]");
 #endif
 
 namespace {
-class CSCMatrix {
-private:
-	csc m_csc;
-
-public:
-	CSCMatrix(SpMatrixXd &mat)
-	{
-		mat.makeCompressed();
-		m_csc.m = mat.rows();
-		m_csc.n = mat.cols();
-		m_csc.p = mat.outerIndexPtr();
-		m_csc.i = mat.innerIndexPtr();
-		m_csc.x = mat.valuePtr();
-		m_csc.nzmax = mat.nonZeros();
-		m_csc.nz = -1;
-	}
-
-	operator csc *() { return &m_csc; }
-};
-
-struct QPResult {
-	int status = 0;
-	double objective_val = 0.0;
-	VectorXd x;
-};
-
-QPResult _solve_qp(SpMatrixXd &P, VectorXd &q, SpMatrixXd &G, VectorXd &h,
-                   double tol, int max_iter)
-{
-	// Convert the P and G matrix into sparse CSC matrices
-	CSCMatrix Pcsc(P), Gcsc(G);
-
-#ifdef BQP_DEBUG
-	std::cout << "P =\n" << MatrixXd(P).format(CleanFmt) << std::endl;
-	std::cout << "q =\n" << MatrixXd(q).format(CleanFmt) << std::endl;
-#endif
-
-	// Generate a lower bound matrix
-	VectorXd l =
-	    VectorXd::Ones(G.rows()) * std::numeric_limits<c_float>::lowest();
-
-	// Populate data
-	OSQPData data;
-	data.n = P.rows();
-	data.m = G.rows();
-	data.P = Pcsc;
-	data.q = const_cast<c_float *>(q.data());
-	data.A = Gcsc;
-	data.l = const_cast<c_float *>(l.data());
-	data.u = const_cast<c_float *>(h.data());
-
-	// Define solver settings as default
-	OSQPSettings settings;
-	osqp_set_default_settings(&settings);
-	settings.scaling = 0;
-	settings.scaled_termination = 0;
-	settings.rho = 1e-1; // Default value
-	settings.eps_rel = tol;
-	settings.eps_abs = tol;
-	settings.polish = true;
-	settings.polish_refine_iter = 3; // Default value
-	if (max_iter > 0) {
-		settings.max_iter = max_iter;
-	}
-
-	// Setup workspace
-	QPResult res;
-	OSQPWorkspace *work = nullptr;
-	res.status = osqp_setup(&work, &data, &settings);
-	if (res.status != 0) {
-		return res;
-	}
-
-	// Solve the problem
-	res.status = osqp_solve(work);
-	if (res.status == 0 && work->info->status_val < 0) {
-		res.status = work->info->status_val;
-	}
-#ifdef BQP_DEBUG
-	std::cout << "res.status = " << work->info->status << " res.status_polish = " << work->info->status_polish << std::endl;
-#endif
-
-	// Copy the results to the output arrays
-	res.x = Map<VectorXd>(work->solution->x, P.rows());
-	res.objective_val = work->info->obj_val;
-
-	// Cleanup the workspace
-	osqp_cleanup(work);
-
-	return res;
-}
-
 template <typename T>
 size_t sum(const T &t)
 {
@@ -217,7 +123,7 @@ QPResult _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
 	}
 
 	// Compute the sparsity pattern of Aext
-	VectorXi Aspp(v2);
+	VectorXi Aspp = VectorXi::Zero(v2);
 	for (size_t i = v0; i < v1; i++) {
 		Aspp[i] = i + 1;  // Only copying the upper triangle
 	}
@@ -244,7 +150,7 @@ QPResult _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
 	bext.block(v0, 0, v1, 1) = -Avalid.transpose() * bvalid;
 
 	// Compute the sparsity pattern of G
-	VectorXi Gssp(v2);
+	VectorXi Gssp = VectorXi::Zero(v2);
 	for (size_t i = v0; i < v1; i++) {
 		Gssp[i] = n_cstr_invalid + (nonneg ? 1 : 0);
 	}
@@ -281,7 +187,7 @@ QPResult _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
 		}
 	}
 
-#ifdef BQP_DEBUG
+#ifdef NLIF_DEBUG
 	std::cout << "Aext = \n" << MatrixXd(Aext).format(CleanFmt) << std::endl;
 	std::cout << "bext = \n" << MatrixXd(bext).format(CleanFmt) << std::endl;
 	std::cout << "G    = \n" << MatrixXd(G).format(CleanFmt) << std::endl;
@@ -291,7 +197,7 @@ QPResult _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
 	//
 	// Step 3: Sovle the QP
 	//
-	QPResult res = _solve_qp(Aext, bext, G, h, tol, max_iter);
+	QPResult res = solve_qp(Aext, bext, G, h, tol, max_iter);
 
 	//
 	// Step 4: Post-processing
@@ -306,8 +212,8 @@ QPResult _solve_weights_qp(const MatrixXd &A, const VectorXd &b,
 	return res;
 }
 
-void _bioneuronqp_solve_single(BioneuronWeightProblem *problem,
-                               BioneuronSolverParameters *params, size_t j)
+void _two_comp_solve_single(TwoCompWeightProblem *problem,
+                            TwoCompSolverParameters *params, size_t j)
 {
 	// Copy some input parameters as convenient aliases
 	size_t Npre = problem->n_pre;
@@ -427,7 +333,7 @@ void _bioneuronqp_solve_single(BioneuronWeightProblem *problem,
 	const int max_iter = params->max_iter;
 	QPResult res =
 	    _solve_weights_qp(A, b, valid, i_th, reg, tol, max_iter, nonneg);
-#ifdef BQP_DEBUG
+#ifdef NLIF_DEBUG
 	std::cout << "x = \n" << res.x.format(CleanFmt) << std::endl;
 	std::cout << "status = " << res.status << std::endl;
 #endif
@@ -500,13 +406,14 @@ void _bioneuronqp_solve_single(BioneuronWeightProblem *problem,
 	}
 }
 
-BioneuronError _bioneuronqp_solve(BioneuronWeightProblem *problem,
-                                  BioneuronSolverParameters *params)
+NlifError _two_comp_solve(TwoCompWeightProblem *problem,
+                          TwoCompSolverParameters *params)
 {
 	// Construct the kernal that is being executed -- here, we're solving the
 	// weights for a single post-neuron.
-	auto kernel =
-	    [&](size_t idx) { _bioneuronqp_solve_single(problem, params, idx); };
+	auto kernel = [&](size_t idx) {
+		_two_comp_solve_single(problem, params, idx);
+	};
 
 	// Construct the progress callback
 	bool did_cancel = false;
@@ -526,15 +433,15 @@ BioneuronError _bioneuronqp_solve(BioneuronWeightProblem *problem,
 	if ((params->n_threads != 1) && (problem->n_post > 1)) {
 		Threadpool pool(params->n_threads);
 		pool.run(problem->n_post, kernel, progress);
-	} else if (params->n_threads == 1) {
-		for (int i = 0; i < problem->n_post; i++) {
-			
-		}
-	} else if (problem->n_post > 0) {
+	}
+	else if (params->n_threads == 1) {
+		for (int i = 0; i < problem->n_post; i++) {}
+	}
+	else if (problem->n_post > 0) {
 		kernel(0);
 	}
 
-	return did_cancel ? BN_ERR_CANCEL : BN_ERR_OK;
+	return did_cancel ? NL_ERR_CANCEL : NL_ERR_OK;
 }
 
 }  // namespace
@@ -547,140 +454,58 @@ BioneuronError _bioneuronqp_solve(BioneuronWeightProblem *problem,
 extern "C" {
 #endif
 
-/******************************************************************************
- * Enum BioneuronError                                                        *
- ******************************************************************************/
-
-const char *bioneuronqp_strerr(BioneuronError err)
-{
-	switch (err) {
-		case BN_ERR_OK:
-			return "no error";
-		case BN_ERR_INVALID_N_PRE:
-			return "n_pre is invalid";
-		case BN_ERR_INVALID_N_POST:
-			return "n_post is invalid";
-		case BN_ERR_INVALID_N_SAMPLES:
-			return "n_samples is invalid";
-		case BN_ERR_INVALID_A_PRE:
-			return "a_pre is invalid";
-		case BN_ERR_INVALID_J_POST:
-			return "j_post is invalid";
-		case BN_ERR_INVALID_MODEL_WEIGHTS:
-			return "model_weights is invalid";
-		case BN_ERR_INVALID_CONNECTION_MATRIX_EXC:
-			return "connection_matrix_exc is invalid";
-		case BN_ERR_INVALID_CONNECTION_MATRIX_INH:
-			return "connection_matrix_inh is invalid";
-		case BN_ERR_INVALID_REGULARISATION:
-			return "regularisation is invalid";
-		case BN_ERR_INVALID_SYNAPTIC_WEIGHTS_EXC:
-			return "synaptic_weights_exc is invalid";
-		case BN_ERR_INVALID_SYNAPTIC_WEIGHTS_INH:
-			return "synaptic_weights_inh is invalid";
-		case BN_ERR_INVALID_TOLERANCE:
-			return "tolerance is invalid";
-		case BN_ERR_CANCEL:
-			return "canceled by user";
-	}
-	return "unknown error code";
-}
-
-/******************************************************************************
- * Struct BioneuronWeightProblem                                              *
- ******************************************************************************/
-
-#define DEFAULT_REGULARISATION 1e-1
-#define DEFAULT_TOLERANCE 1e-6;
-
-void bioneuronqp_weight_problem_init(BioneuronWeightProblem *problem)
-{
-	problem->n_pre = 0;
-	problem->n_post = 0;
-	problem->n_samples = 0;
-	problem->a_pre = nullptr;
-	problem->j_post = nullptr;
-	problem->model_weights = nullptr;
-	problem->connection_matrix_exc = nullptr;
-	problem->connection_matrix_inh = nullptr;
-	problem->regularisation = DEFAULT_REGULARISATION;
-	problem->j_threshold = 0.0;
-	problem->relax_subthreshold = 0;
-	problem->non_negative = 0;
-	problem->synaptic_weights_exc = 0;
-	problem->synaptic_weights_inh = 0;
-}
-
-/******************************************************************************
- * Struct BioneuronSolverParameters                                           *
- ******************************************************************************/
-
-void bioneuronqp_solver_parameters_init(BioneuronSolverParameters *params)
-{
-	params->renormalise = 1;
-	params->tolerance = DEFAULT_TOLERANCE;
-	params->progress = nullptr;
-	params->warn = nullptr;
-	params->n_threads = 0;
-}
-
-/******************************************************************************
- * Actual solver code                                                         *
- ******************************************************************************/
-
-static BioneuronError _check_problem_is_valid(BioneuronWeightProblem *problem)
+static NlifError _check_problem_is_valid(TwoCompWeightProblem *problem)
 {
 	if (problem->n_pre <= 0) {
-		return BN_ERR_INVALID_N_PRE;
+		return NL_ERR_INVALID_N_PRE;
 	}
 	if (problem->n_post <= 0) {
-		return BN_ERR_INVALID_N_PRE;
+		return NL_ERR_INVALID_N_PRE;
 	}
 	if (problem->n_samples <= 0) {
-		return BN_ERR_INVALID_N_SAMPLES;
+		return NL_ERR_INVALID_N_SAMPLES;
 	}
 	if (problem->a_pre == nullptr) {
-		return BN_ERR_INVALID_A_PRE;
+		return NL_ERR_INVALID_A_PRE;
 	}
 	if (problem->j_post == nullptr) {
-		return BN_ERR_INVALID_J_POST;
+		return NL_ERR_INVALID_J_POST;
 	}
 	if (problem->model_weights == nullptr) {
-		return BN_ERR_INVALID_MODEL_WEIGHTS;
+		return NL_ERR_INVALID_MODEL_WEIGHTS;
 	}
 	if (problem->connection_matrix_exc == nullptr) {
-		return BN_ERR_INVALID_CONNECTION_MATRIX_EXC;
+		return NL_ERR_INVALID_CONNECTION_MATRIX_EXC;
 	}
 	if (problem->connection_matrix_inh == nullptr) {
-		return BN_ERR_INVALID_CONNECTION_MATRIX_INH;
+		return NL_ERR_INVALID_CONNECTION_MATRIX_INH;
 	}
 	if (problem->regularisation < 0.0) {
-		return BN_ERR_INVALID_REGULARISATION;
+		return NL_ERR_INVALID_REGULARISATION;
 	}
 	if (problem->synaptic_weights_exc == nullptr) {
-		return BN_ERR_INVALID_SYNAPTIC_WEIGHTS_EXC;
+		return NL_ERR_INVALID_SYNAPTIC_WEIGHTS_EXC;
 	}
 	if (problem->synaptic_weights_inh == nullptr) {
-		return BN_ERR_INVALID_SYNAPTIC_WEIGHTS_INH;
+		return NL_ERR_INVALID_SYNAPTIC_WEIGHTS_INH;
 	}
-	return BN_ERR_OK;
+	return NL_ERR_OK;
 }
 
-static BioneuronError _check_parameters_is_valid(
-    BioneuronSolverParameters *params)
+static NlifError _check_parameters_is_valid(TwoCompSolverParameters *params)
 {
 	if (params->tolerance <= 0.0) {
-		return BN_ERR_INVALID_TOLERANCE;
+		return NL_ERR_INVALID_TOLERANCE;
 	}
-	return BN_ERR_OK;
+	return NL_ERR_OK;
 }
 
-BioneuronError bioneuronqp_solve(BioneuronWeightProblem *problem,
-                                 BioneuronSolverParameters *params)
+NlifError two_comp_solve(TwoCompWeightProblem *problem,
+                         TwoCompSolverParameters *params)
 {
 	// Make sure the given pointers point at valid problem and parameter
 	// descriptors
-	BioneuronError err;
+	NlifError err;
 	if ((err = _check_problem_is_valid(problem)) < 0) {
 		return err;
 	}
@@ -690,7 +515,7 @@ BioneuronError bioneuronqp_solve(BioneuronWeightProblem *problem,
 
 	// Forward the parameters and the problem description to the internal C++
 	// code.
-	return _bioneuronqp_solve(problem, params);
+	return _two_comp_solve(problem, params);
 }
 
 #ifdef __cplusplus

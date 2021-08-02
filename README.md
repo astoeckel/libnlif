@@ -1,42 +1,29 @@
-# libbioneuronqp
-**A synaptic weight solver for single and two-comparment LIF neurons with current- or conductance-based synapses.**
+# libnlif
+**A synaptic weight solver for multi-compartment LIF neurons
 
 ![Visualisation of the synaptic weight space of a low-dimensional toy problem.](doc/weight_space.png)
 
-*libbioneuronqp* is a fast weight solver for two-compartment LIF neurons with conductance-based synapses using the [OSQP library](https://www.osqp.org/). *libbioneuronqp* is written in C++ and exposes a C API. The code is intended to be used via the supplied Python binding.
+*libnlif* is a fast weight solver for multi-compartment LIF neurons ("*n*-LIF") with conductance- or current-based synapses.
+The weight solver uses the [OSQP library](https://www.osqp.org/).
+*libnlif* is written in a combination of C++ and Python; the C++ portions of the code are compiled automatically once the code is used for the first time.
 
-## Compiling
+## Installing and Dependencies
 
-All dependencies are included in the repository. You'll just need a C++11 compliant C++ compiler and a C99 compliant C compiler. While this code should theoretically compile on Windows and MacOS, it has only been tested on Linux so far.
-
-*libbioneuronqp* uses the `meson` build system, which in turn depends on `ninja` (a replacement for `make`). To install all dependencies, run
+All compile-time dependencies, including `eigen` and `osqp` are contained in this repository.
+Make sure to clone this repository using the `recursive` flag:
 ```sh
-# On Fedora, RedHat, CentOS
-sudo dnf install ninja-build
-
-# On Ubuntu, Debian
-sudo apt-get install ninja-build
-
-# You may have to use "pip" instead of "pip3"
-sudo pip3 install meson
+git clone --recursive https://github.com/astoeckel/libnlif
 ```
 
-Then, to compile the library, simply run
-```sh
-git clone --recursive https://github.com/astoeckel/libbioneuronqp
-cd libbioneuronqp; mkdir build; cd build
-meson .. -Dbuildtype=release
-ninja
+Simply use `pip3 install` to install the library (depending on your system, you may have to use `pip` instead of `pip3`)
+```
+cd libnlif
+pip3 install --user -e .
 ```
 
-To test the code, run
-```sh
-LD_LIBRARY_PATH=. python3 ../bioneuronqp/bioneuronqp.py
+To make sure that the library has been installed successfully, run
 ```
-
-You can install the library by running
-```sh
-sudo ninja install
+python3 -m libnlif.solver
 ```
 
 ## License
