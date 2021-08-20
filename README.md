@@ -24,7 +24,7 @@ pip3 install --user -e .
 
 To make sure that the library has been installed successfully, run
 ```
-python3 -m libnlif.solver
+python3 -m nlif.solver
 ```
 
 ## License
