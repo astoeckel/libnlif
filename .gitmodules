@@ -1,7 +1,4 @@
-[submodule "extern/eigen3"]
-	path = extern/eigen3
+[submodule "nlif/cpp/extern/eigen"]
+	path = nlif/cpp/extern/eigen
 	url = https://gitlab.com/libeigen/eigen
 	branch = origin/3.3.7
-[submodule "nlif/cpp/extern/eigen"]
-	path = libnlif/cpp/extern/eigen
-	url = https://gitlab.com/libeigen/eigen
