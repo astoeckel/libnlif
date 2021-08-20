@@ -1,5 +1,5 @@
 # libnlif
-**A synaptic weight solver for multi-compartment LIF neurons
+**A synaptic weight solver for multi-compartment LIF neurons**
 
 ![Visualisation of the synaptic weight space of a low-dimensional toy problem.](doc/weight_space.png)
 
