@@ -323,6 +323,102 @@ class ReducedSystem:
 
         return res
 
+    def fraction_coeffs(self, normalise=False, tabulate=False):
+        # Iterate over all possible input configurations X. In a matrix M
+        # keep track of the product terms that could be influenced by this
+        # particular input.
+        n_configs = 2 ** self.n_inputs
+        xs = []
+        X = np.zeros((n_configs, self.n_inputs))
+        M = np.zeros((n_configs, n_configs))
+        for i in range(n_configs):
+            x = np.array(tuple(bool(i & (1 << k)) for k in range(self.n_inputs)))
+            xs.append(list(np.where(x)[0]))
+            X[i] = x
+            for j in range(n_configs):
+                M[i, j] = (j & i) == j
+
+        # Now iterate over all possible inputs and compute the numerator and
+        # denominator
+        b_denom = np.zeros(n_configs)
+        b_numer = np.zeros(n_configs)
+        for i in range(n_configs):
+            # Compute A and b for this x
+            A_dyn = self._L + np.diag(self._a_const + self._A @ X[i])
+            b_dyn = self._b_const + self._B @ X[i]
+
+            # Compute the denumerator and numerator
+            b_denom[i] = np.linalg.det(A_dyn)
+            b_numer[i] = np.inner(self._c, (np.linalg.solve(A_dyn, b_dyn) * b_denom[i]) - self._v_som)
+
+        # Compute the influence of each input on the denumerator and numerator
+        coeff_denom = np.linalg.solve(M, b_denom)
+        coeff_numer = np.linalg.solve(M, b_numer)
+
+        # Force small coefficients to zero
+        max_coeff = max(np.max(np.abs(coeff_denom)), np.max(np.abs(coeff_numer)))
+        coeff_denom[np.abs(coeff_denom / max_coeff) < 1e-9] = 0.0
+        coeff_numer[np.abs(coeff_numer / max_coeff) < 1e-9] = 0.0
+
+        # Normalise the matrix coefficients if so desired
+        if normalise:
+            scale = 1.0 / np.max(np.abs(coeff_numer))
+            coeff_numer *= scale
+            coeff_denom *= scale
+
+        if not tabulate:
+            return xs, coeff_numer, coeff_denom
+
+        # Arrange the coefficients in a matrix
+        def tabulate(coeffs):
+            # Extract the rows and columns
+            rows, cols = [set()], [set()] # Constant is encoded as None
+            for coeff_idx, var_idcs in sorted(enumerate(xs), key=lambda x: (len(x[1]), x[1])):
+                if coeffs[coeff_idx] == 0.0:
+                    continue
+
+                # Check whether this coefficient can be expressed as a product
+                # of coefficients already in the table
+                done = False
+                var_idcs_set = set(var_idcs)
+                while not done:
+                    for i, row_idcs in enumerate(rows):
+                        for j, col_idcs in enumerate(cols):
+                            if sorted(tuple(row_idcs) + tuple(col_idcs)) == var_idcs:
+                                done = True
+                    if not done:
+                        # Find the longest intersection between the column and
+                        # row indices
+                        max_row_isec, max_col_isec = set(), set()
+                        for i, row_idcs in enumerate(rows):
+                            isec = var_idcs_set & row_idcs
+                            if len(isec) > len(max_row_isec):
+                                max_row_isec = isec
+                        for i, col_idcs in enumerate(cols):
+                            isec = var_idcs_set & col_idcs
+                            if len(isec) > len(max_col_isec):
+                                max_col_isec = isec
+
+                        # If the row intersection was longer than the column
+                        # intersection, add a new part to the column and vice
+                        # vera.
+                        if len(max_row_isec) >= len(max_col_isec):
+                            cols.append(var_idcs_set - max_row_isec)
+                        else:
+                            rows.append(var_idcs_set - max_col_isec)
+
+            # Create the actual table
+            table = np.zeros((len(rows), len(cols)))
+            for i, row_idcs in enumerate(rows):
+                for j, col_idcs in enumerate(cols):
+                    for coeff_idx, var_idcs in enumerate(xs):
+                        if sorted(tuple(row_idcs) + tuple(col_idcs)) == var_idcs:
+                            table[i, j] = coeffs[coeff_idx]
+
+            return rows, cols, table
+
+        return tabulate(coeff_numer), tabulate(coeff_denom)
+
     @property
     def A(self):
         return self._A
@@ -635,6 +731,29 @@ class AssembledNeuron:
             'C_m': soma.C_m
         }
 
+    def lif_rate(self, Js):
+        params = self.lif_parameters()
+        return lif_utils.lif_detailed_rate(Js,
+                                           v_th=params["v_th"],
+                                           v_reset=params["v_reset"],
+                                           gL=params["g_L"],
+                                           Cm=params["C_m"],
+                                           EL=params["E_L"],
+                                           tau_ref=params["tau_ref"])
+
+    def lif_rate_inv(self, rates):
+        params = self.lif_parameters()
+        return lif_utils.lif_detailed_rate_inv(rates,
+                                               v_th=params["v_th"],
+                                               v_reset=params["v_reset"],
+                                               gL=params["g_L"],
+                                               Cm=params["C_m"],
+                                               EL=params["E_L"],
+                                               tau_ref=params["tau_ref"])
+
+    def i_th(self):
+        return self.lif_rate_inv(1e-3)
+
     def A(self, xs, exclude_intrinsic=False):
         """
         Computes the A-matrix for the given inputs xs. The last dimension of xs
@@ -667,11 +786,15 @@ class AssembledNeuron:
             reduced_system = self.reduced_system(
                 exclude_intrinsic=exclude_intrinsic)
 
-        return self._apply_to_input_array(xs, reduced_system.i_som, tuple())
+        def i_som_single(x):
+            return reduced_system.i_som(
+                x * reduced_system.in_scale) / reduced_system.out_scale
 
-    def rate(self, xs, reduce_system=None, exclude_intrinsic=True):
+        return self._apply_to_input_array(xs, i_som_single, tuple())
+
+    def rate(self, xs, reduced_system=None, exclude_intrinsic=True):
         params = self.lif_parameters()
-        i_som = self.i_som(xs, reduce_system, exclude_intrinsic)
+        i_som = self.i_som(xs, reduced_system, exclude_intrinsic)
         return lif_utils.lif_detailed_rate(i_som,
                                            v_th=params["v_th"],
                                            v_reset=params["v_reset"],
@@ -792,16 +915,16 @@ class AssembledNeuron:
                                  record_spike_times=False,
                                  record_in_refrac=not include_refrac) as sim:
 
-            def iSom_empirical_single(x):
+            def i_som_empirical_single(x):
                 res = self._simulate_noisy(sim, n, x, noise, tau, rate)
                 if include_refrac:
-                    iSom = np.mean(res.isom)
+                    i_som = np.mean(res.isom)
                 else:
-                    iSom = np.mean(res.isom[~res.in_refrac])
-                return iSom
+                    i_som = np.mean(res.isom[~res.in_refrac])
+                return i_som
 
             return self._apply_to_input_array(xs,
-                                              iSom_empirical_single,
+                                              i_som_empirical_single,
                                               tuple(),
                                               progress=progress,
                                               parallel=True)
@@ -848,16 +971,9 @@ class AssembledNeuron:
                                  seed=None,
                                  progress=True,
                                  rng=np.random):
-        rates = self.rate_empirical(xs, T, dt, noise, tau, rate, seed,
-                                    progress, rng)
-        params = self.lif_parameters()
-        return lif_utils.lif_detailed_rate_inv(rates,
-                                               v_th=params["v_th"],
-                                               v_reset=params["v_reset"],
-                                               gL=params["g_L"],
-                                               Cm=params["C_m"],
-                                               EL=params["E_L"],
-                                               tau_ref=params["tau_ref"])
+        return self.lif_rate_inv(
+            self.rate_empirical(xs, T, dt, noise, tau, rate, seed, progress,
+                                rng))
 
     def impulse_response(self, xs=None, T=0.1, dt=1e-4, v0=None):
         # Canonicalise the inputs

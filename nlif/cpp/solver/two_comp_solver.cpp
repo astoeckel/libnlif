@@ -340,48 +340,7 @@ void _two_comp_solve_single(TwoCompWeightProblem *problem,
 	if (res.status != 0) {
 		std::stringstream ss;
 		ss << "Error while computing weights for post-neuron " << j << ". ";
-		switch (res.status) {
-			case OSQP_DATA_VALIDATION_ERROR:
-				ss << "Data valiation error.";
-				break;
-			case OSQP_SETTINGS_VALIDATION_ERROR:
-				ss << "Settings validation error.";
-				break;
-			case OSQP_LINSYS_SOLVER_INIT_ERROR:
-			case OSQP_LINSYS_SOLVER_LOAD_ERROR:
-				ss << "Cannot load linear solver.";
-				break;
-			case OSQP_MEM_ALLOC_ERROR:
-				ss << "Cannot allocated workspace memory.";
-				break;
-#ifdef OSQP_TIME_LIMIT_REACHED
-			case OSQP_TIME_LIMIT_REACHED:
-				ss << "Time limit reached.";
-				break;
-#endif /* OSQP_TIME_LIMIT_REACHED */
-			case OSQP_MAX_ITER_REACHED:
-				ss << "Maximum number of iterations reached.";
-				break;
-			case OSQP_PRIMAL_INFEASIBLE:
-				ss << "Primal infeasible.";
-				break;
-			case OSQP_DUAL_INFEASIBLE:
-				ss << "Dual infeasible.";
-				break;
-			case OSQP_SIGINT:
-				ss << "Interrupted by user.";
-				break;
-			case OSQP_UNSOLVED:
-				ss << "Unsolved.";
-				break;
-			case OSQP_NONCVX_ERROR:
-			case OSQP_NON_CVX:
-				ss << "Problem not convex.";
-				break;
-			default:
-				ss << "Unknown/unhandled error.";
-				break;
-		}
+		ss << res.status_to_str();
 		if (params->warn) {
 			params->warn(ss.str().c_str(), j);
 		}
@@ -435,7 +394,9 @@ NlifError _two_comp_solve(TwoCompWeightProblem *problem,
 		pool.run(problem->n_post, kernel, progress);
 	}
 	else if (params->n_threads == 1) {
-		for (int i = 0; i < problem->n_post; i++) {}
+		for (int i = 0; i < problem->n_post; i++) {
+			kernel(i);
+		}
 	}
 	else if (problem->n_post > 0) {
 		kernel(0);

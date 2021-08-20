@@ -31,7 +31,7 @@ extern "C" {
  * Enum NlifError                                                             *
  ******************************************************************************/
 
-const char *bioneuronqp_strerr(NlifError err)
+const char *nlif_strerr(NlifError err)
 {
 	switch (err) {
 		case NL_ERR_OK:
@@ -60,6 +60,8 @@ const char *bioneuronqp_strerr(NlifError err)
 			return "synaptic_weights_inh is invalid";
 		case NL_ERR_INVALID_TOLERANCE:
 			return "tolerance is invalid";
+		case NL_ERR_QP:
+			return "error while solving the quadratic program";
 		case NL_ERR_CANCEL:
 			return "canceled by user";
 	}

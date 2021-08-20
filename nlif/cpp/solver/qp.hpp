@@ -25,6 +25,9 @@ struct QPResult {
 	int status = 0;
 	double objective_val = 0.0;
 	Eigen::VectorXd x;
+
+	const char* status_to_str() const;
+	bool has_solution() const;
 };
 
 QPResult solve_qp(SpMatrixXd &P, Eigen::VectorXd &q, SpMatrixXd &G,

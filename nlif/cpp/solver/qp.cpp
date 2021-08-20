@@ -24,6 +24,66 @@
 
 using namespace Eigen;
 
+const char *QPResult::status_to_str() const
+{
+	switch (status) {
+		case OSQP_DATA_VALIDATION_ERROR:
+			return "Data valiation error.";
+		case OSQP_SETTINGS_VALIDATION_ERROR:
+			return "Settings validation error.";
+		case OSQP_LINSYS_SOLVER_INIT_ERROR:
+		case OSQP_LINSYS_SOLVER_LOAD_ERROR:
+			return "Cannot load linear solver.";
+		case OSQP_MEM_ALLOC_ERROR:
+			return "Cannot allocated workspace memory.";
+#ifdef OSQP_TIME_LIMIT_REACHED
+		case OSQP_TIME_LIMIT_REACHED:
+			return "Time limit reached.";
+#endif /* OSQP_TIME_LIMIT_REACHED */
+		case OSQP_MAX_ITER_REACHED:
+			return "Maximum number of iterations reached.";
+		case OSQP_PRIMAL_INFEASIBLE:
+			return "Primal infeasible.";
+		case OSQP_DUAL_INFEASIBLE:
+			return "Dual infeasible.";
+		case OSQP_SIGINT:
+			return "Interrupted by user.";
+		case OSQP_UNSOLVED:
+			return "Unsolved.";
+		case OSQP_NONCVX_ERROR:
+		case OSQP_NON_CVX:
+			return "Problem not convex.";
+		default:
+			return "Unknown/unhandled error.";
+	}
+}
+
+bool QPResult::has_solution() const
+{
+	switch (status) {
+		case 0:
+#ifdef OSQP_TIME_LIMIT_REACHED
+		case OSQP_TIME_LIMIT_REACHED:
+#endif /* OSQP_TIME_LIMIT_REACHED */
+		case OSQP_MAX_ITER_REACHED:
+			return true;
+
+		case OSQP_DATA_VALIDATION_ERROR:
+		case OSQP_SETTINGS_VALIDATION_ERROR:
+		case OSQP_LINSYS_SOLVER_INIT_ERROR:
+		case OSQP_LINSYS_SOLVER_LOAD_ERROR:
+		case OSQP_MEM_ALLOC_ERROR:
+		case OSQP_PRIMAL_INFEASIBLE:
+		case OSQP_DUAL_INFEASIBLE:
+		case OSQP_SIGINT:
+		case OSQP_UNSOLVED:
+		case OSQP_NONCVX_ERROR:
+		case OSQP_NON_CVX:
+		default:
+			return false;
+	}
+}
+
 namespace {
 class CSCMatrix {
 private:
@@ -44,7 +104,7 @@ public:
 
 	operator csc *() { return &m_csc; }
 };
-}
+}  // namespace
 
 QPResult solve_qp(SpMatrixXd &P, VectorXd &q, SpMatrixXd &G, VectorXd &h,
                   double tol, int max_iter)
@@ -79,7 +139,7 @@ QPResult solve_qp(SpMatrixXd &P, VectorXd &q, SpMatrixXd &G, VectorXd &h,
 	settings.rho = 1e-1;  // Default value
 	settings.eps_rel = tol;
 	settings.eps_abs = tol;
-	settings.polish = true;
+	settings.polish = false;
 	settings.polish_refine_iter = 3;  // Default value
 	if (max_iter > 0) {
 		settings.max_iter = max_iter;
