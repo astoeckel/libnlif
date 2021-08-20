@@ -4,6 +4,7 @@
 ![Visualisation of the synaptic weight space of a low-dimensional toy problem.](doc/weight_space.png)
 
 *libnlif* is a fast weight solver for multi-compartment LIF neurons ("*n*-LIF") with conductance- or current-based synapses.
+This Python-backed library supercedes and extends the stand-alone *[libbioneuronqp](https://github.com/astoeckel/libbioneuronqp)*.
 The weight solver uses the [OSQP library](https://www.osqp.org/).
 *libnlif* is written in a combination of C++ and Python; the C++ portions of the code are compiled automatically once the code is used for the first time.
 
