@@ -373,36 +373,8 @@ NlifError _two_comp_solve(TwoCompWeightProblem *problem,
 	auto kernel = [&](size_t idx) {
 		_two_comp_solve_single(problem, params, idx);
 	};
-
-	// Construct the progress callback
-	bool did_cancel = false;
-	auto progress = [&](size_t cur, size_t max) {
-		if (params->progress) {
-			if (!params->progress(cur, max)) {
-				did_cancel = true;
-			}
-			return !did_cancel;
-		}
-		return true;
-	};
-
-	// Create a threadpool and solve the weights for all neurons. Do not create
-	// a threadpool if there is only one set of weights to solve for, or the
-	// number of threads has explicitly been set to one.
-	if ((params->n_threads != 1) && (problem->n_post > 1)) {
-		Threadpool pool(params->n_threads);
-		pool.run(problem->n_post, kernel, progress);
-	}
-	else if (params->n_threads == 1) {
-		for (int i = 0; i < problem->n_post; i++) {
-			kernel(i);
-		}
-	}
-	else if (problem->n_post > 0) {
-		kernel(0);
-	}
-
-	return did_cancel ? NL_ERR_CANCEL : NL_ERR_OK;
+	return ThreadpoolWrapper::run(params->n_threads, problem->n_post, kernel,
+	                              params->progress);
 }
 
 }  // namespace

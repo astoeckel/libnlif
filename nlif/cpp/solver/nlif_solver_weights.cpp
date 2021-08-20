@@ -40,7 +40,7 @@
 #include "matrix_types.hpp"
 #include "nlif_solver.h"
 #include "qp.hpp"
-#include "threadpool.hpp"
+#include "threadpool_wrapper.hpp"
 
 using namespace Eigen;
 
@@ -80,7 +80,8 @@ private:
 	const size_t n_W;
 
 	/**
-	 * Distributes the individual weights and computes the original equilibrium potentials.
+	 * Distributes the individual weights and computes the original equilibrium
+	 * potentials.
 	 */
 	VectorXd compute_theta0()
 	{
@@ -136,7 +137,8 @@ private:
 		}
 	}
 
-	MatrixXd W_dyn(const VectorXd &a) {
+	MatrixXd W_dyn(const VectorXd &a)
+	{
 		MatrixXd res = MatrixXd::Zero(k, n_W);
 		int idx = 0;
 		for (int i = 0; i < k; i++) {
@@ -203,8 +205,9 @@ private:
 		std::cout << "B = \n" << B.format(CleanFmt) << std::endl;
 		std::cout << "b_const = \n" << b_const.format(CleanFmt) << std::endl;
 
-//		std::cout << "A_in = \n" << A_in.format(CleanFmt) << std::endl;
-//		std::cout << "J_tar = \n" << J_tar.format(CleanFmt) << std::endl;
+		//		std::cout << "A_in = \n" << A_in.format(CleanFmt) << std::endl;
+		//		std::cout << "J_tar = \n" << J_tar.format(CleanFmt) <<
+		//std::endl;
 
 		std::cout << "W = \n" << W.format(CleanFmt) << std::endl;
 		std::cout << "W_mask = \n" << W_mask.format(CleanFmt) << std::endl;
@@ -261,7 +264,8 @@ public:
 #endif
 	}
 
-	NlifError run() {
+	NlifError run()
+	{
 		//
 		// Step 1: Count stuff and setup indices used to partition the matrices.
 		//
@@ -271,21 +275,21 @@ public:
 		const size_t n_vars = n_W + N * n;
 
 		const size_t v0 = 0;
-		const size_t v1 = v0 + n_W;       // Weights
-		const size_t v2 = v1 + N * n;     // Auxiliary variables
-		const size_t v3 = v2 + n_invalid; // Slack variables
+		const size_t v1 = v0 + n_W;        // Weights
+		const size_t v2 = v1 + N * n;      // Auxiliary variables
+		const size_t v3 = v2 + n_invalid;  // Slack variables
 
 		const size_t p1 = 0;
-		const size_t p2 = p1 + n_valid;   // Current error
-		const size_t p3 = p2 + N * n;     // Voltage error
-		const size_t p4 = p3 + n_vars;    // Trust region
-		const size_t p5 = p4 + n_vars;    // Regularisation
-		const size_t p6 = p5 + n_invalid; // Penalize slack variables
+		const size_t p2 = p1 + n_valid;    // Current error
+		const size_t p3 = p2 + N * n;      // Voltage error
+		const size_t p4 = p3 + n_vars;     // Trust region
+		const size_t p5 = p4 + n_vars;     // Regularisation
+		const size_t p6 = p5 + n_invalid;  // Penalize slack variables
 
 		const size_t g1 = 0;
-		const size_t g2 = g1 + n_W; // Non-negative weights
-		const size_t g3 = g2 + n_invalid; // Subthreshold constraints
-		const size_t g4 = g3 + n_invalid; // Slack non-negativity
+		const size_t g2 = g1 + n_W;        // Non-negative weights
+		const size_t g3 = g2 + n_invalid;  // Subthreshold constraints
+		const size_t g4 = g3 + n_invalid;  // Slack non-negativity
 
 		const double alpha1 = std::sqrt(problem.alpha1);
 		const double alpha2 = std::sqrt(problem.alpha2);
@@ -301,8 +305,8 @@ public:
 		//
 		VectorXd theta0 = compute_theta0();
 		const VectorXd weights = params.use_sanathanan_koerner
-		                       ? compute_sanathanan_koerner_weights()
-		                       : VectorXd::Constant(N, 1.0);
+		                             ? compute_sanathanan_koerner_weights()
+		                             : VectorXd::Constant(N, 1.0);
 
 		//
 		// Step 3: Calculate the sparsity pattern of the P matrix
@@ -310,8 +314,8 @@ public:
 		VectorXi Pssp = VectorXi::Zero(v3);
 		for (size_t i = v0; i < v1; i++) {
 			Pssp[i] += N * n;  // For Part 2: Voltage errors
-			Pssp[i] += 1;  // For Part 3: Trust region
-			Pssp[i] += 1;  // For Part 4: Regularisation
+			Pssp[i] += 1;      // For Part 3: Trust region
+			Pssp[i] += 1;      // For Part 4: Regularisation
 		}
 		for (size_t i = v1; i < v2; i++) {
 			Pssp[i] += 1;  // For Part 1: Current errors
@@ -351,9 +355,9 @@ public:
 			const VectorMap v0s(theta0.data() + v1 + i * n, n);
 
 			// Assemble the individual sub-matrices for A, b
-			MatrixXd Pw = MatrixXd::Zero(n, v1); // Terms linear in w
-			MatrixXd Pv = MatrixXd::Zero(n, n);  // Terms linear in v
-			VectorXd qi = VectorXd::Zero(n);     // Constant terms
+			MatrixXd Pw = MatrixXd::Zero(n, v1);  // Terms linear in w
+			MatrixXd Pv = MatrixXd::Zero(n, n);   // Terms linear in v
+			VectorXd qi = VectorXd::Zero(n);      // Constant terms
 
 			// Constant terms
 			qi -= b_const;
@@ -375,7 +379,7 @@ public:
 				const size_t i_global = p2 + i * n + i0;
 				for (size_t i1 = 0; i1 < size_t(n_W); i1++) {
 					P.insert(i_global, v0 + i1) =
-						alpha2 * weights[i] * Pw(i0, i1);
+					    alpha2 * weights[i] * Pw(i0, i1);
 				}
 				for (size_t i1 = 0; i1 < size_t(n); i1++) {
 					P.insert(i_global, v1 + i * n + i1) =
@@ -419,12 +423,6 @@ public:
 		PTP.selfadjointView<Upper>().rankUpdate(P.transpose());
 		VectorXd PTq = -P.transpose() * q;
 
-		/*std::cout << P.col(0).toDense().format(CleanFmt) << std::endl;
-		auto ptr = P.outerIndexPtr();
-		for (size_t i = 0; i < v3; i++) {
-			std::cout << (ptr[i + 1] - ptr[i]) << ", " << Pssp[i] << std::endl;
-		}*/
-
 		//
 		// Step 5: Assemble the inequality constraints
 		//
@@ -435,7 +433,8 @@ public:
 			Gssp[i] = 2;  // Regularisation, trust region
 		}
 		for (size_t i = v1; i < v2; i++) {
-			Gssp[i] = 3;  // Subthreshold constraints, regularisation, trust region
+			Gssp[i] =
+			    3;  // Subthreshold constraints, regularisation, trust region
 		}
 		for (size_t i = v2; i < v3; i++) {
 			Gssp[i] = 2;  // Each slack variable is used twice
@@ -474,11 +473,6 @@ public:
 
 		// Remove superfluous entries from G
 		G.prune(1e-9);
-
-/*		auto ptr = G.outerIndexPtr();
-		for (size_t i = 0; i < v3; i++) {
-			std::cout << (ptr[i + 1] - ptr[i]) << ", " << Gssp[i] << std::endl;
-		}*/
 
 		//
 		// Step 6: Solve the problem
@@ -534,40 +528,8 @@ NlifError nlif_solve_weights_iter(NlifWeightProblem *problem,
 	auto kernel = [&](size_t idx) {
 		NlifWeightSolver(problem, params, idx).run();
 	};
-
-	// Construct the progress callback
-	bool did_cancel = false;
-	auto progress = [&](size_t cur, size_t max) {
-		if (params->progress) {
-			if (!params->progress(cur, max)) {
-				did_cancel = true;
-			}
-			return !did_cancel;
-		}
-		return true;
-	};
-
-	// Create a threadpool and solve the weights for all neurons. Do not create
-	// a threadpool if there is only one set of weights to solve for, or the
-	// number of threads has explicitly been set to one.
-	int n_threads = std::min(params->n_threads, problem->n_post);
-#ifdef NLIF_DEBUG
-	std::cout << "n_threads = " << n_threads << std::endl;
-#endif
-	if ((n_threads != 1) && (problem->n_post > 1)) {
-		Threadpool pool(params->n_threads);
-		pool.run(problem->n_post, kernel, progress);
-	} else {
-		for (int i = 0; i < problem->n_post; i++) {
-			kernel(i);
-			if (params->progress) {
-				if (!params->progress(i + 1, problem->n_post)) {
-					return NL_ERR_CANCEL;
-				}
-			}
-		}
-	}
-	return did_cancel ? NL_ERR_CANCEL : NL_ERR_OK;
+	return ThreadpoolWrapper::run(params->n_threads, problem->n_post, kernel,
+	                              params->progress);
 }
 
 #ifdef __cplusplus
