@@ -319,7 +319,7 @@ public:
 				VecB b = calc_b(x);
 
 				// Compute the equilibrium potential
-				const VecV vEq = (-A).ldlt().solve(b);
+				const VecV vEq = (-A).partialPivLu().solve(b);
 
 				// Compute the membrane potential of all compartments
 				v = vEq + ((A * dt).exp() * (v - vEq));
