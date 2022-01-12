@@ -44,7 +44,7 @@
 
 #include "matrix_types.hpp"
 #include "qp.hpp"
-#include "threadpool.hpp"
+#include "threadpool_wrapper.hpp"
 
 using namespace Eigen;
 

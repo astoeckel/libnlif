@@ -24,7 +24,7 @@ def generate_neuron_graph(compartments, connections, f):
     f: is a file-like object to which the DOT description will be written.
     """
 
-    def _fmt(x, scale, unit=None):
+    def _fmt(x, scale=1.0, unit=None):
         if isinstance(x, magic.Number):
             s = "{:0.2f}".format(x * scale).rstrip("0").rstrip(".")
             if unit:
@@ -127,9 +127,12 @@ def generate_neuron_graph(compartments, connections, f):
                 if not channel.J is None:
                     info.append("{}".format(_fmt(channel.J, 1e9, "nA")))
 
-            label = "J" if channel.label == "j" else channel.label
-            label = "<<I>" + label + "</I><BR/><FONT POINT-SIZE=\"9\">" + "<BR/>".join(
-                info) + "</FONT>>"
+            if channel.label:
+                label = "J" if channel.label == "j" else channel.label
+                label = "<<I>" + label + "</I><BR/><FONT POINT-SIZE=\"9\">" + "<BR/>".join(
+                    info) + "</FONT>>"
+            else:
+                label = "<<FONT POINT-SIZE=\"9\">" + "<BR/>".join(info) + "</FONT>>"
             if channel.is_static:
                 _dot_elem("n_" + str(cidx), {
                     "shape": shape,
@@ -155,7 +158,7 @@ def generate_neuron_graph(compartments, connections, f):
             });
 
         for i, channel in enumerate(
-                sorted(compartment.channels, key=lambda x: x.label)):
+                sorted(compartment.channels, key=lambda x: str(x.label))):
             cidx = idx + i + 1
             if channel.is_static and channel.type == "cond":
                 _dot_elem("n_{} -> n_{}".format(idx, cidx))

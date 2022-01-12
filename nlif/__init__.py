@@ -20,5 +20,9 @@ from .neuron import (Neuron, Connection, Compartment, Soma, CondChan, CurChan,
                      ConductanceChannel, CurrentChannel, LIF, LIFCond,
                      TwoCompLIFCond, ThreeCompLIFCond)
 from .simulator import Simulator
+from .solver import Solver
 from .internal.errors import *
+
+import nlif.parameter_optimisation as parameter_optimisation
+import nlif.weight_optimisation as weight_optimisation
 
